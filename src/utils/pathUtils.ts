@@ -1,4 +1,10 @@
 /**
+ * A collection of path utilities that work in both browser and desktop environments.
+ * These functions handle the tricky bits of working with file paths across different
+ * operating systems (Windows, Mac, Linux) so you don't have to worry about it.
+ */
+
+/**
  * Browser-compatible path utilities to replace Node.js path module
  */
 
@@ -38,14 +44,36 @@ export function detectOS(): 'windows' | 'mac' | 'linux' | 'unknown' {
 }
 
 /**
+ * Quick check if we're running on Windows.
+ * Useful when we need to handle Windows-specific path quirks.
+ */
+export function isWindows(): boolean {
+  return detectOS() === 'windows';
+}
+
+/**
  * Compares two paths for equality, handling different OS path separators
+ * and platform-specific case sensitivity
  * 
  * @param path1 First path to compare
  * @param path2 Second path to compare
  * @returns True if the paths are equivalent, false otherwise
  */
 export function arePathsEqual(path1: string, path2: string): boolean {
-  return normalizePath(path1) === normalizePath(path2);
+  // Handle null/undefined cases
+  if (!path1 && !path2) return true;
+  if (!path1 || !path2) return false;
+  
+  const normalizedPath1 = normalizePath(path1);
+  const normalizedPath2 = normalizePath(path2);
+  
+  // On Windows, paths are case-insensitive
+  if (isWindows()) {
+    return normalizedPath1.toLowerCase() === normalizedPath2.toLowerCase();
+  }
+  
+  // On other systems (Mac, Linux), paths are case-sensitive
+  return normalizedPath1 === normalizedPath2;
 }
 
 /**
@@ -116,6 +144,38 @@ export function extname(path: string | null | undefined): string {
   const basenameValue = basename(path);
   const dotIndex = basenameValue.lastIndexOf(".");
   return dotIndex === -1 || dotIndex === 0 ? "" : basenameValue.slice(dotIndex);
+}
+
+/**
+ * Checks if one path is a subpath of another, handling platform-specific
+ * path separators and case sensitivity
+ * 
+ * @param parent The potential parent path
+ * @param child The potential child path
+ * @returns True if child is a subpath of parent
+ */
+export function isSubPath(parent: string, child: string): boolean {
+  // Handle null/undefined cases
+  if (!parent || !child) return false;
+  
+  const normalizedParent = normalizePath(parent);
+  const normalizedChild = normalizePath(child);
+  
+  // Ensure parent path ends with a slash for proper subpath checking
+  // This prevents '/foo/bar' from matching '/foo/bart'
+  const parentWithSlash = normalizedParent.endsWith('/') 
+    ? normalizedParent 
+    : normalizedParent + '/';
+  
+  if (isWindows()) {
+    // Case-insensitive comparison for Windows
+    return normalizedChild.toLowerCase() === normalizedParent.toLowerCase() || 
+           normalizedChild.toLowerCase().startsWith(parentWithSlash.toLowerCase());
+  }
+  
+  // Case-sensitive comparison for other platforms
+  return normalizedChild === normalizedParent || 
+         normalizedChild.startsWith(parentWithSlash);
 }
 
 /**

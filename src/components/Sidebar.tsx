@@ -1,11 +1,23 @@
-import React, { useState, useEffect } from "react";
-import { SidebarProps, TreeNode } from "../types/FileTypes";
+import React, { useState, useEffect, useRef } from "react";
+import { SidebarProps, TreeNode, FileData } from "../types/FileTypes";
 import SearchBar from "./SearchBar";
 import TreeItem from "./TreeItem";
 
+/**
+ * Import path utilities for handling file paths across different operating systems.
+ * While not all utilities are used directly, they're kept for consistency and future use.
+ */
+import { normalizePath, join, isSubPath, arePathsEqual, basename } from "../utils/pathUtils";
+
+/**
+ * The Sidebar component displays a tree view of files and folders, allowing users to:
+ * - Navigate through the file structure
+ * - Select/deselect files and folders
+ * - Search for specific files
+ * - Resize the sidebar width
+ */
 const Sidebar = ({
   selectedFolder,
-  openFolder,
   allFiles,
   selectedFiles,
   toggleFileSelection,
@@ -16,25 +28,26 @@ const Sidebar = ({
   deselectAllFiles,
   expandedNodes,
   toggleExpanded,
-}: SidebarProps) => {
-  const [fileTree, setFileTree] = useState<TreeNode[]>([]);
+}: Omit<SidebarProps, 'openFolder'>) => {
+  // State for managing the file tree and UI
+  const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
-  // Min and max width constraints
+  // Sidebar width constraints for a good UX
   const MIN_SIDEBAR_WIDTH = 200;
   const MAX_SIDEBAR_WIDTH = 500;
 
   // Handle mouse down for resizing
-  const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleResizeStart = (e: any) => {
     e.preventDefault();
     setIsResizing(true);
   };
 
   // Handle resize effect
   useEffect(() => {
-    const handleResize = (e: globalThis.MouseEvent) => {
+    const handleResize = (e: any) => {
       if (isResizing) {
         const newWidth = e.clientX;
         if (newWidth >= MIN_SIDEBAR_WIDTH && newWidth <= MAX_SIDEBAR_WIDTH) {
@@ -69,110 +82,147 @@ const Sidebar = ({
       setIsTreeBuildingComplete(false);
 
       try {
-        // Create a structured representation using nested objects first
-        const fileMap: Record<string, any> = {};
+        // First, find the root folder item if it exists
+        const normalizedSelectedFolder = selectedFolder ? normalizePath(selectedFolder) : '';
+        
+        if (!normalizedSelectedFolder) {
+          console.warn("Selected folder path is empty, can't build tree");
+          setFileTree([]);
+          setIsTreeBuildingComplete(true);
+          return;
+        }
+        
+        // Check if we have any valid files to process
+        if (!Array.isArray(allFiles) || allFiles.length === 0) {
+          console.warn("No files to process for tree building");
+          setFileTree([]);
+          setIsTreeBuildingComplete(true);
+          return;
+        }
+        
+        const rootFolderItem = allFiles.find(file => 
+          file && file.path && file.isDirectory && arePathsEqual(normalizePath(file.path), normalizedSelectedFolder)
+        );
+        
+        console.log("Root folder item found:", rootFolderItem ? "yes" : "no", 
+          rootFolderItem ? `(${rootFolderItem.path})` : "");
+        
+        // Count directory items for debugging
+        const directoryItems = allFiles.filter(file => file.isDirectory);
+        console.log(`Found ${directoryItems.length} directory items in allFiles`);
+        
+        if (directoryItems.length > 0) {
+          // Log the first few directory items for debugging
+          directoryItems.slice(0, 3).forEach(dir => {
+            console.log(`Directory: ${dir.name}, path: ${dir.path}, isDirectory: ${dir.isDirectory}`);
+          });
+        }
 
-        // First pass: create directories and files
-        allFiles.forEach((file) => {
-          if (!file.path) return;
-
-          const relativePath =
-            selectedFolder && file.path.startsWith(selectedFolder)
-              ? file.path
-                  .substring(selectedFolder.length)
-                  .replace(/^\/|^\\/, "")
-              : file.path;
-
-          const parts = relativePath.split(/[/\\]/);
-          let currentPath = "";
-          let current = fileMap;
-
-          // Build the path in the tree
-          for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            if (!part) continue;
-
-            currentPath = currentPath ? `${currentPath}/${part}` : part;
-            
-            // Use the original file.path for files to avoid path duplication
-            const fullPath = i === parts.length - 1 
-              ? file.path // For files, use the original path
-              : (selectedFolder 
-                  ? `${selectedFolder}/${currentPath}` 
-                  : currentPath); // For directories
-
-            if (i === parts.length - 1) {
-              // This is a file
-              current[part] = {
-                id: `node-${fullPath}`,
-                name: part,
-                path: file.path, // Use the original file path
-                type: "file",
-                level: i,
-                fileData: file,
-              };
-            } else {
-              // This is a directory
-              if (!current[part]) {
-                current[part] = {
-                  id: `node-${fullPath}`,
-                  name: part,
-                  path: fullPath,
-                  type: "directory",
-                  level: i,
-                  children: {},
-                };
-              }
-              current = current[part].children;
+        // Create the tree structure starting with the root
+        let rootTree: TreeNode[] = [];
+        
+        if (rootFolderItem) {
+          // If we found a root folder item, use it as the top-level node
+          const rootNode: TreeNode = {
+            id: `node-${normalizedSelectedFolder}`,
+            name: rootFolderItem.name || basename(normalizedSelectedFolder),
+            path: normalizedSelectedFolder,
+            type: "directory",
+            level: 0,
+            children: [],
+            isExpanded: expandedNodes[`node-${normalizedSelectedFolder}`] !== false,
+            fileData: rootFolderItem
+          };
+          
+          // Then build the rest of the tree under this root
+          buildChildrenTree(rootNode, allFiles, normalizedSelectedFolder);
+          rootTree = [rootNode];
+          console.log("Built tree with root node:", rootNode.name);
+        } else {
+          // If no root folder was found, build the tree from the files directly
+          console.log("No root folder item found, building from direct file list");
+          const fileMap: Record<string, any> = {};
+          
+          // First pass: create directories and files
+          allFiles.forEach((file) => {
+            if (!file.path) {
+              console.log("Skipping file with no path");
+              return;
             }
-          }
-        });
-
-        // Convert the nested object structure to the TreeNode array format
-        const convertToTreeNodes = (
-          node: Record<string, any>,
-          level = 0,
-        ): TreeNode[] => {
-          return Object.keys(node).map((key) => {
-            const item = node[key];
-
-            if (item.type === "file") {
-              return item as TreeNode;
-            } else {
-              const children = convertToTreeNodes(item.children, level + 1);
-              const isExpanded =
-                expandedNodes[item.id] !== undefined
-                  ? expandedNodes[item.id]
-                  : true; // Default to expanded if not in state
-
-              return {
-                ...item,
-                children: children.sort((a, b) => {
-                  // Sort directories first
-                  if (a.type === "directory" && b.type === "file") return -1;
-                  if (a.type === "file" && b.type === "directory") return 1;
-
-                  // Sort files by token count (largest first)
-                  if (a.type === "file" && b.type === "file") {
-                    const aTokens = a.fileData?.tokenCount || 0;
-                    const bTokens = b.fileData?.tokenCount || 0;
-                    return bTokens - aTokens;
-                  }
-
-                  // Default to alphabetical
-                  return a.name.localeCompare(b.name);
-                }),
-                isExpanded,
-              };
+            
+            // Skip excluded files
+            if (file.excludedByDefault) {
+              console.log("Skipping excluded file:", file.name);
+              return;
+            }
+            
+            const normalizedFilePath = normalizePath(file.path);
+            
+            // Skip the root folder itself as we're handling it separately
+            if (arePathsEqual(normalizedFilePath, normalizedSelectedFolder)) {
+              console.log("Skipping root folder in file loop:", normalizedFilePath);
+              return;
+            }
+            
+            // Get the relative path for non-root files
+            const relativePath = normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
+              ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1)
+              : normalizedFilePath;
+            
+            const parts = relativePath.split('/');
+            
+            // Extra validation to prevent issues with malformed paths
+            if (parts.length === 0 || (parts.length === 1 && parts[0] === '')) {
+              console.log("Skipping invalid path:", relativePath);
+              return;
+            }
+            
+            let currentPath = '';
+            let current = fileMap;
+            
+            for (let i = 0; i < parts.length; i++) {
+              const part = parts[i];
+              if (!part) continue;
+              
+              currentPath = currentPath ? join(currentPath, part) : part;
+              const fullPath = normalizedSelectedFolder
+                ? join(normalizedSelectedFolder, currentPath)
+                : currentPath;
+              
+              if (i === parts.length - 1) {
+                // This is a file
+                current[part] = {
+                  id: `node-${file.path}`,
+                  name: part,
+                  path: file.path,
+                  type: "file",
+                  level: i + 1,
+                  fileData: file,
+                };
+              } else {
+                // This is a directory
+                if (!current[part]) {
+                  current[part] = {
+                    id: `node-${fullPath}`,
+                    name: part,
+                    path: fullPath,
+                    type: "directory",
+                    level: i + 1,
+                    children: {},
+                  };
+                }
+                current = current[part].children;
+              }
             }
           });
-        };
-
-        // Convert to proper tree structure
-        const treeRoots = convertToTreeNodes(fileMap);
+          
+          // Convert to TreeNode array
+          rootTree = convertToTreeNodes(fileMap);
+          console.log("Built tree from fileMap, found nodes:", rootTree.length);
+        }
 
         // Sort the top level (directories first, then by name)
-        const sortedTree = treeRoots.sort((a, b) => {
+        const sortedTree = rootTree.sort((a, b) => {
           if (a.type === "directory" && b.type === "file") return -1;
           if (a.type === "file" && b.type === "directory") return 1;
 
@@ -188,11 +238,138 @@ const Sidebar = ({
 
         setFileTree(sortedTree);
         setIsTreeBuildingComplete(true);
+        console.log("Tree building complete, nodes:", sortedTree.length);
       } catch (err) {
         console.error("Error building file tree:", err);
-        setFileTree([]);
-        setIsTreeBuildingComplete(true);
+        // On error, try to build a simple flat tree as a fallback
+        try {
+          console.log("Attempting to build a simple flat tree as fallback");
+          const flatTree = allFiles
+            .filter(file => 
+              !arePathsEqual(normalizePath(file.path), selectedFolder ? normalizePath(selectedFolder) : '') && 
+              !file.excludedByDefault // Filter out excluded files
+            )
+            .map((file, index) => {
+              return {
+                id: `node-${file.path}`,
+                name: file.name,
+                path: file.path,
+                type: file.isDirectory ? "directory" as const : "file" as const,
+                level: 0,
+                fileData: file,
+                isExpanded: true
+              };
+            })
+            .sort((a, b) => {
+              // Sort directories first
+              if (a.type === "directory" && b.type === "file") return -1;
+              if (a.type === "file" && b.type === "directory") return 1;
+              return a.name.localeCompare(b.name);
+            });
+            
+          setFileTree(flatTree);
+          setIsTreeBuildingComplete(true);
+          console.log("Built simple flat tree with", flatTree.length, "items");
+        } catch (fallbackError) {
+          console.error("Fallback tree building also failed:", fallbackError);
+          setFileTree([]);
+          setIsTreeBuildingComplete(true);
+        }
       }
+    };
+
+    // Helper function to build children tree under a parent node
+    const buildChildrenTree = (parentNode: TreeNode, files: any[], parentPath: string) => {
+      try {
+        // Find direct children of this parent
+        const childFiles = files.filter(file => {
+          if (!file || !file.path) {
+            console.warn("Found invalid file entry in buildChildrenTree");
+            return false;
+          }
+          if (arePathsEqual(file.path, parentPath)) return false; // Skip the parent itself
+          if (file.excludedByDefault) return false; // Skip excluded files
+          
+          const normalizedPath = normalizePath(file.path);
+          return isSubPath(parentPath, normalizedPath) && 
+                 // Only direct children (one level down)
+                 normalizedPath.substring(parentPath.length + 1).split('/').length === 1;
+        });
+        
+        console.log(`Building children tree for ${parentNode.name}, found ${childFiles.length} direct children`);
+        
+        // Sort children (directories first, then files)
+        const sortedChildren = childFiles.sort((a: any, b: any) => {
+          // Make sure we treat isDirectory consistently
+          const aIsDir = Boolean(a.isDirectory);
+          const bIsDir = Boolean(b.isDirectory);
+          
+          if (aIsDir && !bIsDir) return -1;
+          if (!aIsDir && bIsDir) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        
+        // Create tree nodes for children
+        parentNode.children = sortedChildren.map((file: any) => {
+          if (!file || !file.path) {
+            console.warn("Skipping invalid file in children map");
+            return null;
+          }
+          
+          const nodePath = normalizePath(file.path);
+          const nodeId = `node-${nodePath}`;
+          const isDirectory = Boolean(file.isDirectory);
+          
+          const node: TreeNode = {
+            id: nodeId,
+            name: file.name || basename(nodePath),
+            path: nodePath,
+            type: isDirectory ? "directory" : "file",
+            level: parentNode.level + 1,
+            fileData: file,
+            isExpanded: expandedNodes[nodeId] !== undefined ? expandedNodes[nodeId] : true // Default to expanded
+          };
+          
+          if (isDirectory) {
+            node.children = [];
+            buildChildrenTree(node, files, nodePath);
+          }
+          
+          return node;
+        }).filter(node => node !== null) as TreeNode[]; // Filter out null values
+      } catch (err) {
+        console.error(`Error building children tree for ${parentNode.name}:`, err);
+        parentNode.children = []; // Ensure we have a valid array even on error
+      }
+    };
+
+    // Helper function to convert the file map to TreeNode array
+    const convertToTreeNodes = (node: Record<string, any>, level = 0): TreeNode[] => {
+      return Object.keys(node).map((key) => {
+        const item = node[key];
+
+        if (item.type === "file") {
+          return item as TreeNode;
+        } else {
+          const children = convertToTreeNodes(item.children, level + 1);
+          const isExpanded = expandedNodes[item.id] !== undefined ? expandedNodes[item.id] : true;
+
+          return {
+            ...item,
+            children: children.sort((a, b) => {
+              if (a.type === "directory" && b.type === "file") return -1;
+              if (a.type === "file" && b.type === "directory") return 1;
+              if (a.type === "file" && b.type === "file") {
+                const aTokens = a.fileData?.tokenCount || 0;
+                const bTokens = b.fileData?.tokenCount || 0;
+                return bTokens - aTokens;
+              }
+              return a.name.localeCompare(b.name);
+            }),
+            isExpanded,
+          };
+        }
+      });
     };
 
     // Use a timeout to not block UI
@@ -224,7 +401,7 @@ const Sidebar = ({
     };
 
     setFileTree((prevTree: TreeNode[]) => applyExpandedState(prevTree));
-  }, [expandedNodes]);
+  }, [expandedNodes, fileTree.length]);
 
   // Flatten the tree for rendering with proper indentation
   const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
@@ -245,12 +422,41 @@ const Sidebar = ({
 
   // Filter the tree based on search term
   const filterTree = (nodes: TreeNode[], term: string): TreeNode[] => {
-    if (!term) return nodes;
+    if (!term) {
+      // When not searching, filter out excluded files/folders
+      return nodes.filter(node => {
+        // Skip excluded files/folders
+        if (node.fileData?.excludedByDefault) {
+          return false;
+        }
+        
+        // For directories, also filter their children
+        if (node.type === "directory" && node.children) {
+          // Filter children recursively
+          const filteredChildren = node.children.filter(child => !child.fileData?.excludedByDefault);
+          
+          // Only keep directories that have non-excluded children after filtering
+          if (filteredChildren.length === 0) {
+            return false; // Skip empty directories after filtering
+          }
+          
+          // Update the node's children to only include non-excluded items
+          node.children = filterTree(filteredChildren, "");
+        }
+        
+        return true;
+      });
+    }
 
     const lowerTerm = term.toLowerCase();
 
     // Function to check if a node or any of its children match the search
     const nodeMatches = (node: TreeNode): boolean => {
+      // Always exclude files/folders marked as excludedByDefault
+      if (node.fileData?.excludedByDefault) {
+        return false;
+      }
+      
       // Check if the node name matches
       if (node.name.toLowerCase().includes(lowerTerm)) return true;
 
@@ -318,6 +524,7 @@ const Sidebar = ({
                   toggleFileSelection={toggleFileSelection}
                   toggleFolderSelection={toggleFolderSelection}
                   toggleExpanded={toggleExpanded}
+                  allFiles={allFiles}
                 />
               ))
             ) : (

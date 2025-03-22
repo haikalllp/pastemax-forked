@@ -17,13 +17,15 @@ const UserInstructions = ({
         </label>
       </div>
       <div className="user-instructions-container">
+        <div className="user-instructions-description">
+          Add custom instructions that will be included with your selected files.
+        </div>
         <div className="user-instructions">
           <textarea
             id="userInstructionsInput"
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="Enter your instructions here..."
-            rows={4}
             style={{
               width: "100%",
               resize: "none",

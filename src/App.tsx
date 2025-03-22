@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
@@ -6,7 +6,12 @@ import UserInstructions from "./components/UserInstructions";
 import { FileData } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
-import { generateAsciiFileTree, normalizePath, arePathsEqual } from "./utils/pathUtils";
+
+/**
+ * Import path utilities for handling file paths across different operating systems.
+ * While not all utilities are used directly, they're kept for consistency and future use.
+ */
+import { generateAsciiFileTree, normalizePath, arePathsEqual, isSubPath, join, basename } from "./utils/pathUtils";
 
 // Access the electron API from the window object
 declare global {
@@ -17,14 +22,17 @@ declare global {
         on: (channel: string, func: (...args: any[]) => void) => void;
         removeListener: (
           channel: string,
-          func: (...args: any[]) => void
+          func: (...args: any[]) => void,
         ) => void;
       };
     };
   }
 }
 
-// Keys for localStorage
+/**
+ * Keys used for storing app state in localStorage.
+ * Keeping them in one place makes them easier to manage and update.
+ */
 const STORAGE_KEYS = {
   SELECTED_FOLDER: "pastemax-selected-folder",
   SELECTED_FILES: "pastemax-selected-files",
@@ -33,7 +41,21 @@ const STORAGE_KEYS = {
   EXPANDED_NODES: "pastemax-expanded-nodes",
 };
 
-const App = () => {
+/**
+ * The main App component that handles:
+ * - File selection and management
+ * - Folder navigation
+ * - File content copying
+ * - UI state management
+ */
+const App = (): JSX.Element => {
+  // Clear saved folder on startup (temporary, for testing)
+  useEffect(() => {
+    localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+    localStorage.removeItem("hasLoadedInitialData");
+    sessionStorage.removeItem("hasLoadedInitialData");
+  }, []);
+
   // Load initial state from localStorage if available
   const savedFolder = localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
   const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
@@ -45,36 +67,38 @@ const App = () => {
   );
   const [allFiles, setAllFiles] = useState([] as FileData[]);
   const [selectedFiles, setSelectedFiles] = useState(
-    savedFiles ? JSON.parse(savedFiles) : ([] as string[])
+    savedFiles ? JSON.parse(savedFiles) : [] as string[]
   );
-  const [sortOrder, setSortOrder] = useState(savedSortOrder || "tokens-desc");
+  const [sortOrder, setSortOrder] = useState(
+    savedSortOrder || "tokens-desc"
+  );
   const [searchTerm, setSearchTerm] = useState(savedSearchTerm || "");
   const [expandedNodes, setExpandedNodes] = useState(
     {} as Record<string, boolean>
   );
   const [displayedFiles, setDisplayedFiles] = useState([] as FileData[]);
-  const [processingStatus, setProcessingStatus] = useState({
-    status: "idle",
-    message: "",
-  } as {
-    status: "idle" | "processing" | "complete" | "error";
-    message: string;
-  });
+  const [processingStatus, setProcessingStatus] = useState(
+    { status: "idle", message: "" } as {
+      status: "idle" | "processing" | "complete" | "error";
+      message: string;
+    }
+  );
   const [includeFileTree, setIncludeFileTree] = useState(false);
+  
+
 
   // State for sort dropdown
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
-  // NEW: State for user instructions
-  const [userInstructions, setUserInstructions] = useState("");
-
   // Check if we're running in Electron or browser environment
   const isElectron = window.electron !== undefined;
+
+  const [isSafeMode, setIsSafeMode] = useState(false);
 
   // Load expanded nodes state from localStorage
   useEffect(() => {
     const savedExpandedNodes = localStorage.getItem(
-      STORAGE_KEYS.EXPANDED_NODES
+      STORAGE_KEYS.EXPANDED_NODES,
     );
     if (savedExpandedNodes) {
       try {
@@ -98,7 +122,7 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEYS.SELECTED_FILES,
-      JSON.stringify(selectedFiles)
+      JSON.stringify(selectedFiles),
     );
   }, [selectedFiles]);
 
@@ -112,24 +136,58 @@ const App = () => {
     localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, searchTerm);
   }, [searchTerm]);
 
-  // Load initial data from saved folder
-  useEffect(() => {
-    if (!isElectron || !selectedFolder) return;
+  // Add a function to cancel directory loading
+  const cancelDirectoryLoading = useCallback(() => {
+    if (isElectron) {
+      window.electron.ipcRenderer.send("cancel-directory-loading");
+      setProcessingStatus({
+        status: "idle",
+        message: "Directory loading cancelled",
+      });
+    }
+  }, [isElectron]);
 
+  // Add this new useEffect for safe mode detection
+  useEffect(() => {
+    if (!isElectron) return;
+    
+    const handleStartupMode = (mode: { safeMode: boolean }) => {
+      setIsSafeMode(mode.safeMode);
+    
+      // If we're in safe mode, don't auto-load the previously selected folder
+      if (mode.safeMode) {
+        console.log("Starting in safe mode - not loading saved folder");
+        localStorage.removeItem("hasLoadedInitialData");
+        localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+      }
+    };
+    
+    window.electron.ipcRenderer.on("startup-mode", handleStartupMode);
+    
+    return () => {
+      window.electron.ipcRenderer.removeListener("startup-mode", handleStartupMode);
+    };
+  }, [isElectron]);
+
+  // Modify the existing useEffect for loading initial data
+  useEffect(() => {
+    if (!isElectron || !selectedFolder || isSafeMode) return;
+    
     // Use a flag in sessionStorage to ensure we only load data once per session
     const hasLoadedInitialData = sessionStorage.getItem("hasLoadedInitialData");
     if (hasLoadedInitialData === "true") return;
-
+    
     console.log("Loading saved folder on startup:", selectedFolder);
     setProcessingStatus({
       status: "processing",
-      message: "Loading files from previously selected folder...",
+      message: "Loading files from previously selected folder... (Press ESC to cancel)",
     });
     window.electron.ipcRenderer.send("request-file-list", selectedFolder);
-
+    
     // Mark that we've loaded the initial data
     sessionStorage.setItem("hasLoadedInitialData", "true");
-  }, [isElectron, selectedFolder]);
+  }, [isElectron, selectedFolder, isSafeMode]);
+  
 
   // Listen for folder selection from main process
   useEffect(() => {
@@ -160,7 +218,28 @@ const App = () => {
     };
 
     const handleFileListData = (files: FileData[]) => {
-      console.log("Received file list data:", files.length, "files");
+      console.log("Received file list data:", files ? files.length : 0, "files");
+      
+      // Ensure we have a valid array of files
+      if (!files || !Array.isArray(files)) {
+        console.error("Invalid file list data received:", files);
+        setProcessingStatus({
+          status: "error",
+          message: "Error: Received invalid file list data",
+        });
+        return;
+      }
+      
+      // Log directory entries for debugging
+      const directoryEntries = files.filter(file => file && file.isDirectory);
+      console.log(`Directory entries in file list: ${directoryEntries.length}`);
+      if (directoryEntries.length > 0) {
+        directoryEntries.slice(0, 3).forEach(dir => {
+          console.log(`Directory: ${dir.name}, path: ${dir.path}, isDirectory: ${dir.isDirectory}`);
+        });
+      }
+      
+      // Process files and ensure they have the correct structure
       setAllFiles(files);
       setProcessingStatus({
         status: "complete",
@@ -170,15 +249,56 @@ const App = () => {
       // Apply filters and sort to the new files
       applyFiltersAndSort(files, sortOrder, searchTerm);
 
-      // Select only files that are not binary, not skipped, and not excluded by default
-      const selectablePaths = files
-        .filter(
-          (file: FileData) =>
-            !file.isBinary && !file.isSkipped && !file.excludedByDefault // Respect the excludedByDefault flag
-        )
-        .map((file: FileData) => file.path);
+      // Ensure the root folder is expanded by default if it exists
+      const rootFolder = files.find(file => 
+        file && file.path && file.isDirectory && 
+        arePathsEqual(file.path, selectedFolder || '')
+      );
+      
+      if (rootFolder) {
+        console.log("Found root folder in file list:", rootFolder.name, rootFolder.path);
+        setExpandedNodes((prev: Record<string, boolean>) => ({
+          ...prev,
+          [`node-${selectedFolder}`]: true
+        }));
+      } else {
+        console.log("Root folder not found in file list, selected folder is:", selectedFolder);
+      }
 
-      setSelectedFiles(selectablePaths);
+      // Try to restore saved selection from localStorage, filtering for files that still exist
+      const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
+      let newSelectedFiles: string[] = [];
+      
+      if (savedFiles) {
+        try {
+          const parsedSavedFiles: string[] = JSON.parse(savedFiles);
+          // Filter saved files to ensure they exist in the new file list and are selectable
+          newSelectedFiles = parsedSavedFiles.filter((path: string) =>
+            files.some((file: FileData) =>
+              file && file.path && path && 
+              file.path === path && 
+              !file.isBinary && !file.isSkipped && 
+              !file.excludedByDefault && !file.isDirectory
+            )
+          );
+        } catch (error) {
+          console.error("Error parsing saved selected files:", error);
+        }
+      }
+
+      // If no valid saved selection, default to selecting all non-binary, non-skipped, non-excluded files
+      if (newSelectedFiles.length === 0) {
+        newSelectedFiles = files
+          .filter(
+            (file: FileData) =>
+              file && file.path && 
+              !file.isBinary && !file.isSkipped && 
+              !file.excludedByDefault && !file.isDirectory
+          )
+          .map((file: FileData) => file.path);
+      }
+
+      setSelectedFiles(newSelectedFiles);
     };
 
     const handleProcessingStatus = (status: {
@@ -193,21 +313,21 @@ const App = () => {
     window.electron.ipcRenderer.on("file-list-data", handleFileListData);
     window.electron.ipcRenderer.on(
       "file-processing-status",
-      handleProcessingStatus
+      handleProcessingStatus,
     );
 
     return () => {
       window.electron.ipcRenderer.removeListener(
         "folder-selected",
-        handleFolderSelected
+        handleFolderSelected,
       );
       window.electron.ipcRenderer.removeListener(
         "file-list-data",
-        handleFileListData
+        handleFileListData,
       );
       window.electron.ipcRenderer.removeListener(
         "file-processing-status",
-        handleProcessingStatus
+        handleProcessingStatus,
       );
     };
   }, [isElectron, sortOrder, searchTerm]);
@@ -226,7 +346,7 @@ const App = () => {
   const applyFiltersAndSort = (
     files: FileData[],
     sort: string,
-    filter: string
+    filter: string,
   ) => {
     let filtered = files;
 
@@ -236,7 +356,7 @@ const App = () => {
       filtered = files.filter(
         (file) =>
           file.name.toLowerCase().includes(lowerFilter) ||
-          file.path.toLowerCase().includes(lowerFilter)
+          file.path.toLowerCase().includes(lowerFilter),
       );
     }
 
@@ -261,59 +381,75 @@ const App = () => {
 
   // Toggle file selection
   const toggleFileSelection = (filePath: string) => {
-    // Normalize the incoming file path to handle cross-platform issues
+    // Normalize the incoming file path
     const normalizedPath = normalizePath(filePath);
     
     setSelectedFiles((prev: string[]) => {
-      // Check if the file is already selected
+      // Check if the file is already selected using case-sensitive/insensitive comparison as appropriate
       const isSelected = prev.some(path => arePathsEqual(path, normalizedPath));
       
       if (isSelected) {
         // Remove the file from selected files
-        const newSelection = prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
-        return newSelection;
+        return prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
       } else {
         // Add the file to selected files
-        const newSelection = [...prev, normalizedPath];
-        return newSelection;
+        return [...prev, normalizedPath];
       }
     });
   };
 
   // Toggle folder selection (select/deselect all files in folder)
   const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
-    // Normalize the folder path
-    const normalizedFolderPath = normalizePath(folderPath);
+    console.log('toggleFolderSelection called with:', { folderPath, isSelected });
     
-    const filesInFolder = allFiles.filter(
-      (file: FileData) =>
-        normalizePath(file.path).startsWith(normalizedFolderPath) && 
-        !file.isBinary && 
-        !file.isSkipped,
-
-    );
-
-    if (isSelected) {
-      // Add all files from this folder that aren't already selected
-      const filePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
+    // Normalize the folder path for cross-platform compatibility
+    const normalizedFolderPath = normalizePath(folderPath);
+    console.log('Normalized folder path:', normalizedFolderPath);
+    
+    // Function to check if a file is in the given folder or its subfolders
+    const isFileInFolder = (filePath: string, folderPath: string): boolean => {
+      const normalizedFilePath = normalizePath(filePath);
       
+      // A file is in the folder if:
+      // 1. The paths are equal (exact match)
+      // 2. The file path is a subpath of the folder
+      return arePathsEqual(normalizedFilePath, folderPath) || 
+             isSubPath(folderPath, normalizedFilePath);
+    };
+    
+    // Filter all files to get only those in this folder (and subfolders) that are selectable
+    const filesInFolder = allFiles.filter((file: FileData) => {
+      const inFolder = isFileInFolder(file.path, normalizedFolderPath);
+      const selectable = !file.isBinary && !file.isSkipped && !file.excludedByDefault && !file.isDirectory;
+      return selectable && inFolder;
+    });
+    
+    console.log('Found', filesInFolder.length, 'selectable files in folder and subfolders');
+    
+    // If no selectable files were found, do nothing
+    if (filesInFolder.length === 0) {
+      console.log('No selectable files found in folder, nothing to do');
+      return;
+    }
+    
+    // Extract just the paths from the files and normalize them
+    const folderFilePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
+    console.log('File paths in folder:', folderFilePaths);
+    
+    if (isSelected) {
+      // Adding files - create a new Set with all existing + new files
       setSelectedFiles((prev: string[]) => {
-        const newSelection = [...prev];
-        filePaths.forEach((path: string) => {
-          if (!newSelection.some(p => arePathsEqual(p, path))) {
-            newSelection.push(path);
-          }
-        });
+        const existingSelection = new Set(prev.map(normalizePath));
+        folderFilePaths.forEach((path: string) => existingSelection.add(path));
+        const newSelection = Array.from(existingSelection);
+        console.log(`Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`);
         return newSelection;
       });
     } else {
-      // Remove all files from this folder
+      // Removing files - filter out any file that's in our folder or subfolders
       setSelectedFiles((prev: string[]) => {
-        const newSelection = prev.filter(
-          (path: string) =>
-
-            !filesInFolder.some((file: FileData) => arePathsEqual(normalizePath(file.path), path)),
-        );
+        const newSelection = prev.filter((path: string) => !isFileInFolder(path, normalizedFolderPath));
+        console.log(`Removed ${prev.length - newSelection.length} files from selection, total now: ${newSelection.length}`);
         return newSelection;
       });
     }
@@ -340,10 +476,13 @@ const App = () => {
   // Calculate total tokens from selected files
   const calculateTotalTokens = () => {
     return selectedFiles.reduce((total: number, path: string) => {
-      const file = allFiles.find((f: FileData) => f.path === path);
+      const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
       return total + (file ? file.tokenCount : 0);
     }, 0);
   };
+
+  // NEW: State for user instructions
+  const [userInstructions, setUserInstructions] = useState("");
 
   // Concatenate selected files content for copying,
   // and add user instructions (wrapped in tags) at the bottom if provided.
@@ -351,10 +490,14 @@ const App = () => {
     // Sort selected files according to current sort order
     const [sortKey, sortDir] = sortOrder.split("-");
     const sortedSelected = allFiles
-      .filter((file: FileData) => selectedFiles.includes(file.path))
+      .filter((file: FileData) => 
+        selectedFiles.some((selectedPath: string) => 
+          arePathsEqual(selectedPath, file.path)
+        )
+      )
       .sort((a: FileData, b: FileData) => {
         let comparison = 0;
-
+    
         if (sortKey === "name") {
           comparison = a.name.localeCompare(b.name);
         } else if (sortKey === "tokens") {
@@ -362,38 +505,39 @@ const App = () => {
         } else if (sortKey === "size") {
           comparison = a.size - b.size;
         }
-
+    
         return sortDir === "asc" ? comparison : -comparison;
       });
-
+    
     if (sortedSelected.length === 0) {
       return "No files selected.";
     }
-
-    let concatenatedString = "";
-
+    
+    // Wrap user instructions if any and add to the beginning
+    const userInstructionsBlock = userInstructions.trim()
+      ? `<user_instructions>\n${userInstructions}\n</user_instructions>\n\n`
+      : "";
+    
+    let concatenatedString = userInstructionsBlock;
+    
     // Add ASCII file tree if enabled
     if (includeFileTree && selectedFolder) {
       const asciiTree = generateAsciiFileTree(sortedSelected, selectedFolder);
       concatenatedString += `<file_map>\n${selectedFolder}\n${asciiTree}\n</file_map>\n\n`;
     }
-
+    
     sortedSelected.forEach((file: FileData) => {
       concatenatedString += `\n\n// ---- File: ${file.name} ----\n\n`;
       concatenatedString += file.content;
     });
-
-    // Wrap user instructions if any and add to the bottom
-    const userInstructionsBlock = userInstructions.trim()
-      ? `\n<user_instructions>\n${userInstructions}\n</user_instructions>\n\n`
-      : "";
-    return concatenatedString + userInstructionsBlock;
+    
+    return concatenatedString;
   };
 
   // Handle select all files
   const selectAllFiles = () => {
     const selectablePaths = displayedFiles
-      .filter((file: FileData) => !file.isBinary && !file.isSkipped)
+      .filter((file: FileData) => !file.isBinary && !file.isSkipped && !file.excludedByDefault && !file.isDirectory)
       .map((file: FileData) => file.path);
 
     setSelectedFiles((prev: string[]) => {
@@ -411,7 +555,9 @@ const App = () => {
   const deselectAllFiles = () => {
     const displayedPaths = displayedFiles.map((file: FileData) => file.path);
     setSelectedFiles((prev: string[]) =>
-      prev.filter((path: string) => !displayedPaths.includes(path))
+      prev.filter((path: string) => 
+        !displayedPaths.some((displayedPath: string) => arePathsEqual(displayedPath, path))
+      )
     );
   };
 
@@ -434,7 +580,7 @@ const App = () => {
       // Save to localStorage
       localStorage.setItem(
         STORAGE_KEYS.EXPANDED_NODES,
-        JSON.stringify(newState)
+        JSON.stringify(newState),
       );
 
       return newState;
@@ -442,7 +588,7 @@ const App = () => {
   };
 
   return (
-    <ThemeProvider>
+    <ThemeProvider children={
       <div className="app-container">
         <header className="header">
           <h1>PasteMax</h1>
@@ -469,6 +615,12 @@ const App = () => {
           <div className="processing-indicator">
             <div className="spinner"></div>
             <span>{processingStatus.message}</span>
+            <button
+              className="cancel-btn"
+              onClick={cancelDirectoryLoading}
+            >
+              Cancel
+            </button>
           </div>
         )}
 
@@ -480,7 +632,6 @@ const App = () => {
           <div className="main-content">
             <Sidebar
               selectedFolder={selectedFolder}
-              openFolder={openFolder}
               allFiles={allFiles}
               selectedFiles={selectedFiles}
               toggleFileSelection={toggleFileSelection}
@@ -543,24 +694,8 @@ const App = () => {
               </div>
 
               <div className="copy-button-container">
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "12px",
-                    width: "100%",
-                    maxWidth: "400px",
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      cursor: "pointer",
-                    }}
-                  >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%", maxWidth: "400px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                     <input
                       type="checkbox"
                       checked={includeFileTree}
@@ -572,9 +707,7 @@ const App = () => {
                     text={getSelectedFilesContent()}
                     className="primary full-width"
                   >
-                    <span>
-                      COPY ALL SELECTED ({selectedFiles.length} files)
-                    </span>
+                    <span>COPY ALL SELECTED ({selectedFiles.length} files)</span>
                   </CopyButton>
                 </div>
               </div>
@@ -582,7 +715,7 @@ const App = () => {
           </div>
         )}
       </div>
-    </ThemeProvider>
+    } />
   );
 };
 

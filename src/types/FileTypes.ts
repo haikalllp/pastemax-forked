@@ -9,6 +9,7 @@ export interface FileData {
   error?: string;
   fileType?: string;
   excludedByDefault?: boolean;
+  isDirectory?: boolean;
 }
 
 export interface TreeNode {
@@ -55,6 +56,7 @@ export interface TreeItemProps {
   toggleFileSelection: (filePath: string) => void;
   toggleFolderSelection: (folderPath: string, isSelected: boolean) => void;
   toggleExpanded: (nodeId: string) => void;
+  allFiles: FileData[];
 }
 
 export interface SortOption {

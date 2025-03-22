@@ -1,57 +1,196 @@
+/**
+ * PasteMax Application Styles
+ * A comprehensive stylesheet for the PasteMax application, organized by logical sections
+ * with enhanced documentation for better maintainability and easier navigation.
+ * 
+ * TABLE OF CONTENTS:
+ * =================
+ * 1. Theme Variables & Color Schemes
+ *    - Light Theme Variables
+ *    - Dark Theme Variables
+ * 
+ * 2. Global Styles & Resets
+ *    - Box Model Reset
+ *    - Scrollbar Customization
+ *    - Typography Base
+ * 
+ * 3. Layout Framework
+ *    - App Container
+ *    - Main Content Areas
+ *    - Header Structure
+ *    - Sidebar Layout
+ * 
+ * 4. Form Controls & Interactive Elements
+ *    - Buttons & Button Variants
+ *    - Input Fields
+ *    - Checkboxes & Toggle Controls
+ * 
+ * 5. Sidebar Components
+ *    - Sidebar Header
+ *    - Search Functionality
+ *    - Resize Handle
+ * 
+ * 6. File Tree & Navigation
+ *    - Tree Structure
+ *    - Tree Items
+ *    - Nested & Indentation Logic
+ *    - Selection States
+ * 
+ * 7. Content Display Area
+ *    - Content Header
+ *    - File Cards
+ *    - Sorting Controls
+ *    - Empty States
+ * 
+ * 8. User Interface Controls
+ *    - Copy Button
+ *    - Theme Switcher
+ *    - Action Buttons
+ * 
+ * 9. User Instructions Area
+ *    - Container
+ *    - Textarea
+ *    - Header & Description
+ * 
+ * 10. Utilities & Animations
+ *     - Loading Indicators
+ *     - Status Messages
+ *     - Keyframe Animations
+ *     - Helper Classes
+ */
+
+/*==============================================================================
+ 1. THEME VARIABLES & COLOR SCHEMES
+==============================================================================*/
+
+/* Light Theme Variables
+ * Default color scheme with neutral light backgrounds and dark text
+ * Used when .dark-mode class is NOT applied to the document
+ */
 :root {
-  --background-primary: #ffffff;
-  --background-secondary: #f8f8f8;
-  --background-selected: rgba(0, 0, 0, 0.06);
-  --accent-blue: #0e639c;
-  --border-color: #e0e0e0;
-  --hover-color: #f5f5f5;
-  --text-primary: #000000;
-  --text-secondary: #666666;
-  --text-disabled: #cccccc;
-  --icon-color: #555555;
-  --success-color: #2ecc71;
-  --warning-color: #f39c12;
-  --error-color: #e74c3c;
-  --primary-button-background: #000000;
-  --primary-button-text: #ffffff;
+  /* Background & Surface Colors */
+  --background-primary: #ffffff;    /* Main app background */
+  --background-secondary: #f8f8f8;  /* Secondary surfaces like sidebar */
+  --background-selected: rgba(0, 0, 0, 0.06);  /* Selected item highlight */
+  --hover-color: #f5f5f5;           /* Hover state background */
+  
+  /* Accent & UI Colors */
+  --accent-blue: #0e639c;           /* Primary accent for focus/active states */
+  --border-color: #e0e0e0;          /* Borders, dividers, and separators */
+  
+  /* Typography Colors */
+  --text-primary: #000000;          /* Main text color */
+  --text-secondary: #666666;        /* Secondary text for labels, captions */
+  --text-disabled: #cccccc;         /* Disabled text elements */
+  --icon-color: #555555;            /* Icon fill color */
+  
+  /* Feedback Colors */
+  --success-color: #2ecc71;         /* Success states and confirmations */
+  --warning-color: #f39c12;         /* Warning states and alerts */
+  --error-color: #e74c3c;           /* Error states and critical alerts */
+  
+  /* Button Colors */
+  --primary-button-background: #000000;  /* Primary action button background */
+  --primary-button-text: #ffffff;        /* Primary action button text */
 }
 
+/* Dark Theme Variables
+ * Applies when .dark-mode class is added to a parent element
+ * Optimized for reduced eye strain in low-light environments
+ */
 .dark-mode {
-  --background-primary: #1e1e1e;
-  --background-secondary: #252526;
-  --background-selected: #2a2d2e;
-  --accent-blue: #0e639c;
-  --border-color: #3e3e42;
-  --hover-color: #333333;
-  --text-primary: #e8e8e8;
-  --text-secondary: #bbbbbb;
-  --text-disabled: #808080;
-  --icon-color: #cccccc;
+  /* Background & Surface Colors - Dark variants */
+  --background-primary: #1e1e1e;    /* Main dark background (VS Code inspired) */
+  --background-secondary: #252526;  /* Secondary dark surfaces */
+  --background-selected: #2a2d2e;   /* Selected item highlight in dark mode */
+  --hover-color: #333333;           /* Hover state in dark mode */
+  
+  /* Accent & UI Colors - Adjusted for dark mode */
+  --accent-blue: #0e639c;           /* Same accent color for consistency */
+  --border-color: #3e3e42;          /* Darker borders for separation */
+  
+  /* Typography Colors - Higher contrast for readability */
+  --text-primary: #e8e8e8;          /* Main text - light gray for contrast */
+  --text-secondary: #bbbbbb;        /* Secondary text - softer gray */
+  --text-disabled: #808080;         /* Disabled text - mid gray */
+  --icon-color: #cccccc;            /* Icon color - light gray */
+  
+  /* Feedback Colors - Same as light for clear signaling */
   --success-color: #2ecc71;
   --warning-color: #f39c12;
   --error-color: #e74c3c;
-  --primary-button-background: #0e639c;
+  
+  /* Button Colors - Adjusted for dark mode */
+  --primary-button-background: #0e639c;  /* Blue buttons in dark mode */
   --primary-button-text: #ffffff;
 }
 
+/*==============================================================================
+ 2. GLOBAL STYLES & RESETS
+==============================================================================*/
+
+/* Base Element Reset
+ * Applies consistent box-sizing and removes default margins
+ * Also sets up consistent scrollbar styling across elements
+ */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;  /* Firefox scrollbar styling */
+  scrollbar-color: var(--border-color) transparent;
 }
 
+/* Scrollbars - WebKit Browsers (Chrome, Safari, Edge)
+ * Creates thin, subtle scrollbars that match the application theme
+ */
+*::-webkit-scrollbar {
+  width: 8px;    /* Vertical scrollbar width */
+  height: 8px;   /* Horizontal scrollbar height */
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;  /* Transparent track for cleaner look */
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;  /* Rounded corners */
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);  /* Darker on hover */
+}
+
+/* Dark Mode Scrollbar Adjustments
+ * Makes scrollbars more visible against dark backgrounds
+ */
+.dark-mode *::-webkit-scrollbar-thumb {
+  background-color: #555;  /* Slightly lighter for contrast */
+}
+
+.dark-mode *::-webkit-scrollbar-thumb:hover {
+  background-color: #777;  /* Even lighter on hover for visibility */
+}
+
+/* Body & Document Root
+ * Sets up the base typography and ensures full viewport usage
+ */
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+    Arial, sans-serif;  /* System font stack for native look */
   margin: 0;
   padding: 0;
   background-color: var(--background-primary);
   color: var(--text-primary);
   line-height: 1.5;
   height: 100vh;
-  overflow: hidden;
+  overflow: hidden;  /* Prevents document-level scrolling */
 }
 
+/* React Root Element
+ * Ensures React takes up full viewport height and preserves flexbox layout
+ */
 #root {
   height: 100vh;
   display: flex;
@@ -654,31 +793,42 @@ input[type="search"]:focus {
 
 .processing-indicator {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  gap: 16px;
-  height: 100%;
-  color: var(--text-secondary);
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .spinner {
-  border: 3px solid rgba(0, 0, 0, 0.1);
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--text-secondary);
+  border-top-color: transparent;
   border-radius: 50%;
-  border-top: 3px solid var(--accent-blue);
-  width: 24px;
-  height: 24px;
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
+  to {
     transform: rotate(360deg);
   }
+}
+
+.cancel-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  background-color: var(--error-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.cancel-btn:hover {
+  opacity: 0.9;
 }
 
 .error-message {
@@ -865,26 +1015,278 @@ input[type="text"].search-input:focus {
   gap: 16px;
 }
 
-.user-instructions-container {
-  padding: 16px 10px 10px 10px;
-  display: flex;
-  flex-direction: column;
+.tree-item.disabled-item {
+  opacity: 0.7;
+  cursor: default;
 }
 
+.tree-item.disabled-item .tree-item-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--hover-color);
+  color: var(--text-secondary);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/*--------------------------------------------------------------
+9. User Instructions Area
+--------------------------------------------------------------*/
+
+/* User instructions container */
+.user-instructions-container {
+  padding: 8px 16px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-primary);
+  border-top: 1px solid var(--border-color);
+  margin-top: auto; /* Push to bottom of container */
+}
+
+.user-instructions {
+  width: 100%;
+}
+
+/* User instructions textarea */
 .user-instructions textarea {
   color: var(--text-primary);
   line-height: 1.5;
-  font-size: 1rem;
-  border-top: --border-color;
+  font-size: 0.95rem;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 10px;
+  background-color: var(--background-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  height: 100px; /* Fixed height */
 }
 
+.user-instructions textarea:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.2);
+}
+
+.user-instructions textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* Dark mode specific textarea styles */
+.dark-mode .user-instructions textarea {
+  background-color: #252526; /* Slightly darker than background-secondary */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dark-mode .user-instructions textarea:focus {
+  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.3);
+}
+
+/* User instructions header */
 .user-instructions-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0px 4px 16px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 10px 0px 8px 0px;
   background-color: var(--background-primary);
+  border-bottom: none;
 }
+
+/* User instructions description text */
+.user-instructions-description {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.dark-mode .user-instructions-description {
+  opacity: 0.85;
+}
+
+/*==============================================================================
+ 10. UTILITIES & ANIMATIONS
+==============================================================================*/
+
+/* Search Bar
+ * Reusable search input with icon and clear button
+ * Consistent styling across the application
+ */
+.search-bar {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--background-primary);
+  transition: all 0.2s ease;
+}
+
+.search-bar.focused {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+/* Search Icon
+ * Visual indicator for search functionality
+ * Positioned inside the input for cleaner look
+ */
+.search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.search-bar .search-input,
+.search-bar input[type="search"] {
+  flex: 1;
+  border: none;
+  padding: 8px 8px 8px 32px;
+  background-color: transparent;
+  font-size: 13px;
+  outline: none;
+  color: var(--text-primary);
+}
+
+.search-bar .search-input:focus,
+.search-bar input[type="search"]:focus {
+  border: none;
+  box-shadow: none;
+}
+
+/* Search Clear Button
+ * Allows users to quickly clear the search input
+ * Visible only when search has content
+ */
+.search-clear-btn {
+  background: none;
+  border: none;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  height: 100%;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.search-clear-btn:hover {
+  opacity: 1;
+}
+
+/* Sidebar Resize Handle
+ * Allows user to adjust the width of the sidebar
+ * Changes appearance on hover for affordance
+ */
+.sidebar-resize-handle {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.dragging {
+  background-color: var(--accent-blue);
+  opacity: 0.5;
+}
+
+/* Theme Toggle Control
+ * Allows switching between light and dark themes
+ * Segmented control with active state indicator
+ */
+.theme-segmented-control {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: var(--background-secondary);
+  margin-left: 16px;
+}
+
+.theme-segment {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  border-right: 1px solid var(--border-color);
+  margin: 0;
+}
+
+.theme-segment:focus {
+  outline: none;
+}
+
+.theme-segment span {
+  position: relative;
+}
+
+.theme-segment.active {
+  background-color: var(--accent-blue);
+  color: white;
+  font-weight: 500;
+  border-right-color: var(--accent-blue);
+}
+
+.dark-mode .theme-segment.active {
+  background-color: var(--accent-blue);
+}
+
+.theme-segment {
+  padding: 4px 10px;
+}
+
+/* Header Actions
+ * Container for right-aligned header controls
+ * Ensures proper spacing between controls
+ */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Disabled Tree Item
+ * Visual styling for files that can't be processed
+ * Uses subdued appearance to indicate unavailability
+ */
+.tree-item.disabled-item {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tree-item.disabled-item .tree-item-badge {
+  background-color: var(--error-color);
+  color: white;
+  opacity: 0.7;
+  font-size: 9px;
+  padding: 1px 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Helper Classes
+ * Various utility classes for common style patterns
+ * Can be combined with component classes for specific effects
+ */

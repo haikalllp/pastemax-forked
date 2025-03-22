@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetch all history for potential debugging needs
 
@@ -34,7 +34,7 @@ jobs:
           df -h
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: "npm"
@@ -105,7 +105,7 @@ jobs:
           find release-builds -type f || echo "No files in release-builds"
 
       - name: Upload debug artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debug-${{ runner.os }}-logs
           path: |
@@ -117,7 +117,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Create debug release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/debug-v')
         with:
           files: release-builds/**/*

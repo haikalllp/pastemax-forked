@@ -18,8 +18,8 @@ console.log("🚀 Starting development environment...");
 // Set environment variable for development mode
 process.env.NODE_ENV = "development";
 
-// Default port
-let vitePort = 3000;
+// Default port - updated to match vite.config.ts
+let vitePort = 5173;
 
 // Start Vite dev server
 console.log("📦 Starting Vite dev server...");
@@ -60,6 +60,15 @@ viteProcess.stderr?.on("data", (data) => {
     );
     console.error(
       "  1. Kill the process using port 3000: 'lsof -i :3000 | grep LISTEN' then 'kill -9 [PID]'",
+    );
+    console.error("  2. Change the Vite port in vite.config.ts");
+    console.error("  3. Restart your computer if the issue persists\n");
+  } else if (output.includes("Port 5173 is already in use")) {
+    console.error(
+      "\n❌ Port 5173 is already in use. Try one of the following:",
+    );
+    console.error(
+      "  1. Kill the process using port 5173: 'lsof -i :5173 | grep LISTEN' then 'kill -9 [PID]'",
     );
     console.error("  2. Change the Vite port in vite.config.ts");
     console.error("  3. Restart your computer if the issue persists\n");

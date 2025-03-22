@@ -17,7 +17,7 @@ node_modules
 dist
 dist-ssr
 *.local
-build
+build/*
 
 # Electron-builder output
 out/
@@ -59,3 +59,9 @@ Thumbs.db
 # Release builds
 release-builds/
 dist/
+
+# Repomix
+repomix-output.xml
+repomix.config.json
+.repomixignore
+

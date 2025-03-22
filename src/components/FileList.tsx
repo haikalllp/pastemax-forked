@@ -8,12 +8,14 @@ const FileList = ({
   selectedFiles,
   toggleFileSelection,
 }: FileListProps) => {
-  // Only show files that are in the selectedFiles array and not binary/skipped
+  // Only show files that are in the selectedFiles array and not binary/skipped/excluded/directories
   const displayableFiles = files.filter(
     (file: FileData) =>
       selectedFiles.some(selectedPath => arePathsEqual(selectedPath, file.path)) && 
       !file.isBinary && 
-      !file.isSkipped,
+      !file.isSkipped &&
+      !file.excludedByDefault &&
+      !file.isDirectory
   );
 
   return (

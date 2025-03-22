@@ -1,25 +1,25 @@
 {
   "name": "pastemax",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "vite",
-    "dev:electron": "node dev.js",
+    "dev:electron": "cross-env NODE_ENV=development node dev.js",
     "build": "vite build",
-    "build-electron": "node build.js",
+    "build-electron": "cross-env NODE_ENV=production node build.js",
     "verify-build": "node scripts/verify-build.js",
     "test-build": "node scripts/test-local-build.js",
     "test-build:mac": "node scripts/test-local-build.js mac",
     "test-build:win": "node scripts/test-local-build.js win",
     "test-build:linux": "node scripts/test-local-build.js linux",
     "debug-gh-release": "git tag debug-v$(date +'%Y%m%d%H%M%S') && git push origin --tags",
-    "package": "vite build && electron-builder --publish=never",
-    "package:mac": "vite build && electron-builder --mac --publish=never",
-    "package:win": "vite build && electron-builder --win --publish=never",
-    "package:linux": "vite build && electron-builder --linux --publish=never",
-    "package:all": "vite build && electron-builder -mwl --publish=never",
-    "release": "vite build && electron-builder --publish=onTagOrDraft",
+    "package": "cross-env NODE_ENV=production vite build && electron-builder --publish=never",
+    "package:mac": "cross-env NODE_ENV=production vite build && electron-builder --mac --publish=never",
+    "package:win": "cross-env NODE_ENV=production vite build && electron-builder --win --publish=never",
+    "package:linux": "cross-env NODE_ENV=production vite build && electron-builder --linux --publish=never",
+    "package:all": "cross-env NODE_ENV=production vite build && electron-builder -mwl --publish=never",
+    "release": "cross-env NODE_ENV=production vite build && electron-builder --publish=onTagOrDraft",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "lint:strict": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
@@ -57,7 +57,10 @@
         "dmg",
         "zip"
       ],
-      "hardenedRuntime": false
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
       "target": [
@@ -84,7 +87,13 @@
     "afterSign": "scripts/notarize.js",
     "publish": [
       "github"
-    ]
+    ],
+    "protocols": {
+      "name": "pastemax-protocol",
+      "schemes": [
+        "pastemax"
+      ]
+    }
   },
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
@@ -94,6 +103,7 @@
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "cross-env": "^7.0.3",
     "electron": "^34.3.0",
     "electron-builder": "^24.13.3",
     "eslint": "^8.55.0",

@@ -1,0 +1,5 @@
+i want to add a new feature into my program, i want the exclusion of binary files to be centralised @main.js @excluded-files.js @App.tsx @main.tsx .
+
+And i want to add a new feature where user can add their own specified ignore through the app using a UI, strategically place the UI with good padding and correct theme compatibility. This should be a global config. and user can make preset, there should be default ignore config in which user cannot edit but can copy, when user create custom config it should be empty. or they can copy default.
+
+Please prioritise cross compatibility at all times, ensure that dev and prod are seperated and keeep in mind. use sequential thinking, and start_planning. 
