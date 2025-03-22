@@ -9,6 +9,11 @@ let isLoadingDirectory = false;
 let loadingTimeoutId = null;
 const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
 
+// Store reference to mainWindow globally so we can access it for theme updates
+let mainWindow = null;
+// Track current theme for DevTools sync
+let currentTheme = 'light';
+
 /**
  * Enhanced path handling functions for cross-platform compatibility
  */
@@ -215,7 +220,7 @@ function createWindow() {
     console.log("Production mode: Applying strict security settings");
   }
   
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -305,6 +310,23 @@ function createWindow() {
   // Clean up shortcuts when window is closed
   mainWindow.on('closed', () => {
     globalShortcut.unregisterAll();
+  });
+
+  // Listen for DevTools open events to sync theme
+  mainWindow.webContents.on('devtools-opened', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('DevTools opened, applying current theme');
+      // Apply current theme to DevTools
+      syncDevToolsTheme(currentTheme);
+    }
+  });
+
+  // Also listen for toggling DevTools via keyboard shortcut
+  app.on('web-contents-created', (event, contents) => {
+    contents.on('devtools-opened', () => {
+      console.log('DevTools opened via shortcut, applying current theme');
+      syncDevToolsTheme(currentTheme);
+    });
   });
 
   // In development, load from Vite dev server
@@ -1050,4 +1072,93 @@ function setupDirectoryLoadingTimeout(window, folderPath) {
     console.log(`Directory loading timed out after ${MAX_DIRECTORY_LOAD_TIME / 1000} seconds: ${folderPath}`);
     cancelDirectoryLoading(window);
   }, MAX_DIRECTORY_LOAD_TIME);
+}
+
+// Add IPC listener for theme changes
+ipcMain.on("theme-changed", (event, theme) => {
+  // Store the current theme
+  currentTheme = theme;
+  
+  // Apply theme to DevTools if they're open
+  syncDevToolsTheme(theme);
+});
+
+/**
+ * Synchronizes the DevTools appearance with the application theme
+ * @param {string} theme - The current theme ('light' or 'dark')
+ */
+function syncDevToolsTheme(theme) {
+  // Only proceed if we're in development mode
+  const isDev = process.env.NODE_ENV === "development";
+  if (!isDev) {
+    return; // DevTools aren't enabled in production
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  
+  // Ensure DevTools are open before trying to access them
+  if (!mainWindow.webContents.isDevToolsOpened()) {
+    console.log('DevTools not open, skipping theme sync');
+    return;
+  }
+  
+  const devTools = mainWindow.webContents.devToolsWebContents;
+  if (!devTools) {
+    console.log('DevTools WebContents not available');
+    return;
+  }
+  
+  try {
+    console.log(`Applying ${theme} theme to DevTools`);
+    
+    // Apply dark theme CSS when in dark mode
+    if (theme === 'dark') {
+      devTools.insertCSS(`
+        :root, :host {
+          --toolbar-bg: #1e1e1e;
+          --toolbar-color: #e8e8e8;
+          --toolbar-border: #3e3e42;
+          --searchable-view-bg: #252526;
+          --input-bg: #333333;
+          --input-color: #e8e8e8;
+          --input-border: #3e3e42;
+          --panel-bg: #1e1e1e;
+          --panel-color: #e8e8e8;
+          --panel-item-hover: #333333;
+          --tab-selected-bg: #0e639c;
+          --tab-selected-color: white;
+          --search-match-bg: rgba(255, 255, 0, 0.2);
+        }
+        
+        body.platform-windows .monospace, 
+        body.platform-windows .source-code,
+        body.platform-linux .monospace, 
+        body.platform-linux .source-code,
+        body.platform-mac .monospace, 
+        body.platform-mac .source-code {
+          font-family: Consolas, Menlo, Monaco, "Courier New", monospace !important;
+        }
+
+        .platform-windows #console-prompt .CodeMirror.CodeMirror-focused.cm-focused,
+        .platform-linux #console-prompt .CodeMirror.CodeMirror-focused.cm-focused,
+        .platform-mac #console-prompt .CodeMirror.CodeMirror-focused.cm-focused {
+          background-color: #333333 !important;
+        }
+      `).catch(err => console.error('Error injecting dark mode CSS:', err));
+      
+      // Use executeJavaScript to add dark-mode class
+      devTools.executeJavaScript(`
+        document.documentElement.classList.add('dark-mode');
+        document.body.classList.add('dark-mode');
+      `).catch(err => console.error('Error adding dark-mode class:', err));
+    } else {
+      // Remove dark theme and reset to default light theme
+      devTools.executeJavaScript(`
+        document.documentElement.classList.remove('dark-mode');
+        document.body.classList.remove('dark-mode');
+      `).catch(err => console.error('Error removing dark-mode class:', err));
+    }
+  } catch (err) {
+    console.error('Failed to sync DevTools theme:', err);
+  }
 }

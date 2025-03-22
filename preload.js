@@ -37,7 +37,7 @@ function ensureSerializable(data) {
 contextBridge.exposeInMainWorld("electron", {
   send: (channel, data) => {
     // whitelist channels
-    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading"];
+    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed"];
     if (validChannels.includes(channel)) {
       // Ensure data is serializable before sending
       const serializedData = ensureSerializable(data);
@@ -61,8 +61,11 @@ contextBridge.exposeInMainWorld("electron", {
   // For backward compatibility (but still ensure serialization)
   ipcRenderer: {
     send: (channel, data) => {
-      const serializedData = ensureSerializable(data);
-      ipcRenderer.send(channel, serializedData);
+      const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed"];
+      if (validChannels.includes(channel)) {
+        const serializedData = ensureSerializable(data);
+        ipcRenderer.send(channel, serializedData);
+      }
     },
     on: (channel, func) => {
       const wrapper = (event, ...args) => {

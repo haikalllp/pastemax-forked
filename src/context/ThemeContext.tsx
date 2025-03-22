@@ -17,16 +17,19 @@ const defaultThemeContext: ThemeContextType = {
 
 const ThemeContext = createContext(defaultThemeContext);
 
-type ThemeProviderProps = { children: JSX.Element | JSX.Element[] };
+// Check if running in Electron environment
+const isElectron = window.electron !== undefined;
 
-export const ThemeProvider = ({ children }: ThemeProviderProps): JSX.Element => {
+export const ThemeProvider = ({ children }: { children: any }) => {
   // Initialize theme from localStorage or default to "system"
   const [theme, setThemeState] = useState(() => {
-    const savedTheme = localStorage.getItem("theme") as ThemeType;
-    return savedTheme && ["light", "dark", "system"].includes(savedTheme) ? savedTheme : "system";
+    const savedTheme = localStorage.getItem("theme");
+    return savedTheme && ["light", "dark", "system"].includes(savedTheme) 
+      ? (savedTheme as ThemeType) 
+      : "system";
   });
   
-  const [currentTheme, setCurrentTheme] = useState("light");
+  const [currentTheme, setCurrentTheme] = useState("light" as "light" | "dark");
 
   // Function to set theme and save to localStorage
   const setTheme = (newTheme: ThemeType) => {
@@ -43,6 +46,11 @@ export const ThemeProvider = ({ children }: ThemeProviderProps): JSX.Element => 
         document.body.classList.add("dark-mode");
       } else {
         document.body.classList.remove("dark-mode");
+      }
+      
+      // Notify main process of theme change for DevTools sync if in Electron
+      if (isElectron && window.electron) {
+        window.electron.ipcRenderer.send("theme-changed", themeName);
       }
     };
     
