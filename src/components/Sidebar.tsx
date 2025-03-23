@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { SidebarProps, TreeNode, FileData } from "../types/FileTypes";
+import { SidebarProps, TreeNode, FileData, RootFolder } from "../types/FileTypes";
 import SearchBar from "./SearchBar";
 import TreeItem from "./TreeItem";
+import { FolderOpen, Plus, X } from "lucide-react";
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -46,9 +47,13 @@ const {
  * - Select/deselect files and folders
  * - Search for specific files
  * - Resize the sidebar width
+ * - Manage multiple root folders
  */
 const Sidebar = ({
+  rootFolders,
   selectedFolder,
+  openFolder,
+  addRootFolder,
   allFiles,
   selectedFiles,
   toggleFileSelection,
@@ -60,12 +65,13 @@ const Sidebar = ({
   expandedNodes,
   toggleExpanded,
   processingStatus,
-}: Omit<SidebarProps, 'openFolder'>) => {
+}: SidebarProps) => {
   // State for managing the file tree and UI
   const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const fileTreeRef = useRef(null) as { current: HTMLDivElement | null }; // Use proper type assertion
 
   // Update UI based on backend processing status changes
   useEffect(() => {
@@ -126,31 +132,76 @@ const Sidebar = ({
       console.log("Building file tree from", allFiles.length, "files");
 
       try {
-        // First, find the root folder item if it exists
-        const normalizedSelectedFolder = selectedFolder ? normalizePath(selectedFolder) : '';
+        // Create an array to hold all root nodes
+        let rootTree: TreeNode[] = [];
         
-        if (!normalizedSelectedFolder) {
-          console.warn("Selected folder path is empty, can't build tree");
-          setFileTree([]);
-          setIsTreeBuildingComplete(true);
-          return;
+        // If we have rootFolders, build trees for each one
+        if (rootFolders && rootFolders.length > 0) {
+          // Process each root folder
+          rootFolders.forEach((rootFolder) => {
+            const normalizedRootPath = normalizePath(rootFolder.path);
+            
+            // Find the root folder item if it exists
+            const rootFolderItem = allFiles.find(file => 
+              file && file.path && file.isDirectory && 
+              arePathsEqual(normalizePath(file.path), normalizedRootPath) &&
+              file.rootId === rootFolder.id
+            );
+            
+            // Create a root node
+            const rootNode: TreeNode = {
+              id: `root-${rootFolder.id}`,
+              name: rootFolder.name || basename(normalizedRootPath),
+              path: normalizedRootPath,
+              type: "root", // Use the new "root" type for special styling
+              level: 0,
+              children: [],
+              isExpanded: expandedNodes[`root-${rootFolder.id}`] !== undefined 
+                ? expandedNodes[`root-${rootFolder.id}`] 
+                : true,
+              fileData: rootFolderItem,
+              rootId: rootFolder.id
+            };
+            
+            // Filter files for this root
+            const rootFiles = allFiles.filter(file => file.rootId === rootFolder.id);
+            
+            // Build children tree for this root
+            buildChildrenTree(rootNode, rootFiles, normalizedRootPath);
+            rootTree.push(rootNode);
+          });
+        } 
+        // For backward compatibility, handle selectedFolder case
+        else if (selectedFolder) {
+          const normalizedSelectedFolder = normalizePath(selectedFolder);
+          
+          // Find the root folder item if it exists
+          const rootFolderItem = allFiles.find(file => 
+            file && file.path && file.isDirectory && 
+            arePathsEqual(normalizePath(file.path), normalizedSelectedFolder)
+          );
+          
+          if (rootFolderItem) {
+            // Create a traditional single root node
+            const rootNode: TreeNode = {
+              id: `node-${normalizedSelectedFolder}`,
+              name: rootFolderItem.name || basename(normalizedSelectedFolder),
+              path: normalizedSelectedFolder,
+              type: "directory",
+              level: 0,
+              children: [],
+              isExpanded: expandedNodes[`node-${normalizedSelectedFolder}`] !== undefined 
+                ? expandedNodes[`node-${normalizedSelectedFolder}`] 
+                : true,
+              fileData: rootFolderItem
+            };
+            
+            // Build children tree for backward compatibility
+            buildChildrenTree(rootNode, allFiles, normalizedSelectedFolder);
+            rootTree = [rootNode];
+          }
         }
-        
-        // Check if we have any valid files to process
-        if (!Array.isArray(allFiles) || allFiles.length === 0) {
-          console.warn("No files to process for tree building");
-          setFileTree([]);
-          setIsTreeBuildingComplete(true);
-          return;
-        }
-        
-        const rootFolderItem = allFiles.find(file => 
-          file && file.path && file.isDirectory && arePathsEqual(normalizePath(file.path), normalizedSelectedFolder)
-        );
-        
-        console.log("Root folder item found:", rootFolderItem ? "yes" : "no", 
-          rootFolderItem ? `(${rootFolderItem.path})` : "");
-        
+
         // Count directory items for debugging
         const directoryItems = allFiles.filter(file => file.isDirectory);
         console.log(`Found ${directoryItems.length} directory items in allFiles`);
@@ -160,112 +211,6 @@ const Sidebar = ({
           directoryItems.slice(0, 3).forEach(dir => {
             console.log(`Directory: ${dir.name}, path: ${dir.path}, isDirectory: ${dir.isDirectory}`);
           });
-        }
-
-        // Create the tree structure starting with the root
-        let rootTree: TreeNode[] = [];
-        
-        if (rootFolderItem) {
-          // If we found a root folder item, use it as the top-level node
-          const rootNode: TreeNode = {
-            id: `node-${normalizedSelectedFolder}`,
-            name: rootFolderItem.name || basename(normalizedSelectedFolder),
-            path: normalizedSelectedFolder,
-            type: "directory",
-            level: 0,
-            children: [],
-            isExpanded: expandedNodes[`node-${normalizedSelectedFolder}`] !== undefined 
-              ? expandedNodes[`node-${normalizedSelectedFolder}`] 
-              : true,
-            fileData: rootFolderItem
-          };
-          
-          // Then build the rest of the tree under this root
-          buildChildrenTree(rootNode, allFiles, normalizedSelectedFolder);
-          rootTree = [rootNode];
-          console.log("Built tree with root node:", rootNode.name);
-        } else {
-          // If no root folder was found, build the tree from the files directly
-          console.log("No root folder item found, building from direct file list");
-          const fileMap: Record<string, any> = {};
-          
-          // First pass: create directories and files
-          allFiles.forEach((file, index) => {
-            if (!file.path) {
-              console.log("Skipping file with no path");
-              return;
-            }
-            
-            // Skip excluded files
-            if (file.excludedByDefault) {
-              console.log("Skipping excluded file:", file.name);
-              return;
-            }
-            
-            const normalizedFilePath = normalizePath(file.path);
-            
-            // Skip the root folder itself as we're handling it separately
-            if (arePathsEqual(normalizedFilePath, normalizedSelectedFolder)) {
-              console.log("Skipping root folder in file loop:", normalizedFilePath);
-              return;
-            }
-            
-            // Get the relative path for non-root files
-            const relativePath = normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
-              ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1)
-              : normalizedFilePath;
-            
-            // Use the path utilities to split the path properly
-            const parts = makeRelativePath(relativePath).split('/').filter(Boolean);
-            
-            // Extra validation to prevent issues with malformed paths
-            if (parts.length === 0) {
-              console.log("Skipping invalid path:", relativePath);
-              return;
-            }
-            
-            let currentPath = '';
-            let current = fileMap;
-            
-            for (let i = 0; i < parts.length; i++) {
-              const part = parts[i];
-              if (!part) continue;
-              
-              currentPath = currentPath ? join(currentPath, part) : part;
-              const fullPath = normalizedSelectedFolder
-                ? join(normalizedSelectedFolder, currentPath)
-                : currentPath;
-              
-              if (i === parts.length - 1) {
-                // This is a file
-                current[part] = {
-                  id: `node-${file.path}`,
-                  name: part,
-                  path: file.path,
-                  type: "file",
-                  level: i + 1,
-                  fileData: file,
-                };
-              } else {
-                // This is a directory
-                if (!current[part]) {
-                  current[part] = {
-                    id: `node-${fullPath}`,
-                    name: part,
-                    path: fullPath,
-                    type: "directory",
-                    level: i + 1,
-                    children: {},
-                  };
-                }
-                current = current[part].children;
-              }
-            }
-          });
-          
-          // Convert to TreeNode array
-          rootTree = convertToTreeNodes(fileMap);
-          console.log("Built tree from fileMap, found nodes:", rootTree.length);
         }
 
         // Sort the top level (directories first, then by name)
@@ -454,7 +399,7 @@ const Sidebar = ({
     // Use a timeout to not block UI, but with a longer delay to prevent rapid re-renders
     const buildTreeTimeoutId = setTimeout(buildTree, 50);
     return () => clearTimeout(buildTreeTimeoutId);
-  }, [allFiles, selectedFolder, expandedNodes]);
+  }, [allFiles, selectedFolder, rootFolders, expandedNodes]);
 
   // Flatten the tree for rendering with proper indentation
   const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
@@ -548,55 +493,76 @@ const Sidebar = ({
     <div className="sidebar" style={{ width: `${sidebarWidth}px` }}>
       <div className="sidebar-header">
         <div className="sidebar-title">Files</div>
-        <div className="sidebar-folder-path">{selectedFolder}</div>
+        {rootFolders && rootFolders.length > 0 ? (
+          <div className="sidebar-actions">
+            <button 
+              className="sidebar-action-btn select-all"
+              onClick={selectAllFiles}
+              disabled={processingStatus?.status === "processing" || allFiles.length === 0}
+            >
+              Select All
+            </button>
+            <button
+              className="sidebar-action-btn deselect-all"
+              onClick={deselectAllFiles}
+              disabled={processingStatus?.status === "processing" || selectedFiles.length === 0}
+            >
+              Deselect All
+            </button>
+          </div>
+        ) : selectedFolder ? (
+          <div className="sidebar-folder-path">{selectedFolder}</div>
+        ) : (
+          <div className="sidebar-folder-path">
+            <button
+              className="select-folder-btn sidebar-select-btn"
+              onClick={openFolder}
+              disabled={processingStatus?.status === "processing"}
+            >
+              <FolderOpen size={14} />
+              Select Folder
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="sidebar-search">
         <SearchBar
           searchTerm={searchTerm}
           onSearchChange={onSearchChange}
-          placeholder="Search files..."
         />
       </div>
 
-      <div className="sidebar-actions">
-        <button className="sidebar-action-btn" onClick={selectAllFiles}>
-          Select All
-        </button>
-        <button className="sidebar-action-btn" onClick={deselectAllFiles}>
-          Deselect All
-        </button>
-      </div>
-
-      {allFiles.length > 0 ? (
-        <>
-          <div className="file-tree">
-            {visibleTree.length > 0 ? (
-              visibleTree.map((node) => (
-                <TreeItem
-                  key={node.id}
-                  node={node}
-                  selectedFiles={selectedFiles}
-                  toggleFileSelection={toggleFileSelection}
-                  toggleFolderSelection={toggleFolderSelection}
-                  toggleExpanded={toggleExpanded}
-                  allFiles={allFiles}
-                />
-              ))
-            ) : (
-              <div className="tree-empty">No files match your search.</div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="tree-empty">No files found in this folder.</div>
+      {!selectedFolder && rootFolders.length === 0 && (
+        <div className="empty-folder-message">
+          No folder selected. Please select a folder to view files.
+        </div>
       )}
 
-      <div
-        className="sidebar-resize-handle"
-        onMouseDown={handleResizeStart}
-        title="Drag to resize sidebar"
-      ></div>
+      {processingStatus?.status === "processing" && (
+        <div className="sidebar-loading">
+          <div className="spinner"></div>
+          <span>{processingStatus.message}</span>
+        </div>
+      )}
+
+      {/* File tree list */}
+      <div className="file-tree" ref={fileTreeRef}>
+        {fileTree.map((node: TreeNode) => (
+          <TreeItem
+            key={node.id}
+            node={node}
+            selectedFiles={selectedFiles}
+            toggleFileSelection={toggleFileSelection}
+            toggleFolderSelection={toggleFolderSelection}
+            toggleExpanded={toggleExpanded}
+            allFiles={allFiles}
+            isRootNode={node.type === "root"}
+          />
+        ))}
+      </div>
+
+      <div className="sidebar-resizer" onMouseDown={handleResizeStart}></div>
     </div>
   );
 };

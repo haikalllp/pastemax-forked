@@ -1,3 +1,10 @@
+export interface RootFolder {
+  id: string;
+  path: string;
+  name: string;
+  isExpanded: boolean;
+}
+
 export interface FileData {
   name: string;
   path: string;
@@ -10,22 +17,27 @@ export interface FileData {
   fileType?: string;
   excludedByDefault?: boolean;
   isDirectory?: boolean;
+  rootId?: string;
+  rootPath?: string;
 }
 
 export interface TreeNode {
   id: string;
   name: string;
   path: string;
-  type: "file" | "directory";
+  type: "file" | "directory" | "root";
   children?: TreeNode[];
   isExpanded?: boolean;
   level: number;
   fileData?: FileData;
+  rootId?: string;
 }
 
 export interface SidebarProps {
+  rootFolders: RootFolder[];
   selectedFolder: string | null;
   openFolder: () => void;
+  addRootFolder: () => void;
   allFiles: FileData[];
   selectedFiles: string[];
   toggleFileSelection: (filePath: string) => void;
@@ -61,6 +73,7 @@ export interface TreeItemProps {
   toggleFolderSelection: (folderPath: string, isSelected: boolean) => void;
   toggleExpanded: (nodeId: string) => void;
   allFiles: FileData[];
+  isRootNode?: boolean;
 }
 
 export interface SortOption {

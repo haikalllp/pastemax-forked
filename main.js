@@ -34,6 +34,9 @@ const gitignoreCache = new Map();
 // Maximum age in milliseconds before invalidating the cache (10 minutes)
 const GITIGNORE_CACHE_MAX_AGE = 10 * 60 * 1000;
 
+// Track root folders for multi-root support
+let rootFolders = [];
+
 // Store reference to mainWindow globally so we can access it for theme updates
 let mainWindow = null;
 // Track current theme for DevTools sync
@@ -398,7 +401,12 @@ app.on("window-all-closed", () => {
   }
 });
 
-// Handle folder selection
+// Generate a unique ID for root folders
+function generateRootId() {
+  return `root-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+// Handle folder selection (first root)
 ipcMain.on("open-folder", async (event) => {
   const result = await dialog.showOpenDialog({
     properties: ["openDirectory"],
@@ -411,6 +419,13 @@ ipcMain.on("open-folder", async (event) => {
       gitignoreCache.clear();
       console.log("Cleared gitignore cache for new project");
       
+      // Reset root folders array
+      rootFolders = [{
+        id: generateRootId(),
+        path: selectedPath,
+        name: path.basename(selectedPath)
+      }];
+      
       // Ensure we're only sending a string, not an object
       const pathString = String(selectedPath);
       console.log("Sending folder-selected event with path:", pathString);
@@ -420,6 +435,66 @@ ipcMain.on("open-folder", async (event) => {
       // Try a more direct approach as a fallback
       event.sender.send("folder-selected", String(selectedPath));
     }
+  }
+});
+
+// Handle adding another root folder
+ipcMain.on("add-root-folder", async (event) => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+  });
+
+  if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+    const selectedPath = result.filePaths[0];
+    try {
+      // Check if this path is already in rootFolders
+      const pathExists = rootFolders.some(root => 
+        arePathsEqual(normalizePath(root.path), normalizePath(selectedPath))
+      );
+      
+      if (pathExists) {
+        event.sender.send("root-folder-error", {
+          error: "This folder has already been added",
+          path: selectedPath
+        });
+        return;
+      }
+      
+      // Add to root folders array
+      const newRoot = {
+        id: generateRootId(),
+        path: selectedPath,
+        name: path.basename(selectedPath)
+      };
+      
+      rootFolders.push(newRoot);
+      
+      console.log("Added new root folder:", newRoot);
+      event.sender.send("root-folder-added", newRoot);
+    } catch (err) {
+      console.error("Error adding root folder:", err);
+      event.sender.send("root-folder-error", {
+        error: err.message,
+        path: selectedPath
+      });
+    }
+  }
+});
+
+// Handle removal of a root folder
+ipcMain.on("remove-root-folder", (event, rootId) => {
+  const initialLength = rootFolders.length;
+  rootFolders = rootFolders.filter(root => root.id !== rootId);
+  
+  if (rootFolders.length < initialLength) {
+    console.log(`Removed root folder with ID: ${rootId}`);
+    event.sender.send("root-folder-removed", rootId);
+  } else {
+    console.error(`Root folder with ID ${rootId} not found`);
+    event.sender.send("root-folder-error", {
+      error: "Root folder not found",
+      rootId
+    });
   }
 });
 
@@ -617,7 +692,7 @@ function shouldSkipDirectory(dirName) {
  * @param {BrowserWindow} window - The Electron window instance for sending updates
  * @returns {Promise<Array>} Array of processed file objects
  */
-async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot = false) {
+async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot = false, rootId = null) {
   if (!isLoadingDirectory) return [];
   
   // Ensure absolute and normalized paths
@@ -652,7 +727,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
       isBinary: false,
       isSkipped: true,
       isDirectory: true,
-      error: "Max directory depth reached"
+      error: "Max directory depth reached",
+      rootId: rootId,
+      rootPath: rootDir
     }];
   }
 
@@ -670,7 +747,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
       isBinary: false,
       isSkipped: true,
       isDirectory: true,
-      error: "Directory skipped for performance"
+      error: "Directory skipped for performance",
+      rootId: rootId,
+      rootPath: rootDir
     }];
   }
 
@@ -689,7 +768,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         isBinary: false,
         isSkipped: false,
         isDirectory: true,
-        relativePath: ""
+        relativePath: "",
+        rootId: rootId,
+        rootPath: rootDir
       };
       
       console.log("Added root folder to file list:", rootEntry.name, rootEntry.path);
@@ -734,7 +815,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
             isBinary: false,
             isSkipped: true,
             isDirectory: true,
-            error: "Directory skipped for performance"
+            error: "Directory skipped for performance",
+            rootId: rootId,
+            rootPath: rootDir
           }];
         }
         
@@ -787,7 +870,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
             isBinary: false,
             isSkipped: false,
             isDirectory: true,
-            error: null
+            error: null,
+            rootId: rootId,
+            rootPath: rootDir
           });
         } catch (dirErr) {
           console.error(`Error adding directory ${fullPath}:`, dirErr);
@@ -802,7 +887,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
             isBinary: false,
             isSkipped: false,
             isDirectory: true,
-            error: `Error reading directory: ${dirErr.message}`
+            error: `Error reading directory: ${dirErr.message}`,
+            rootId: rootId,
+            rootPath: rootDir
           });
         }
         
@@ -813,7 +900,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
             // For these, just add the directory but don't process contents
             console.log(`Skipping deep traversal of ${relativePath} at depth ${depth}`);
           } else {
-            const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false);
+            const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false, rootId);
             if (!isLoadingDirectory) return null;
             
             if (Array.isArray(subResults)) {
@@ -908,7 +995,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
               isBinary: isBin, // Mark as binary if detected by extension
               isSkipped: true,
               isDirectory: false,
-              error: "File too large to process"
+              error: "File too large to process",
+              rootId: rootId,
+              rootPath: rootDir
             };
           }
 
@@ -925,7 +1014,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
               isBinary: true,
               isSkipped: false,
               isDirectory: false,
-              fileType: path.extname(fullPath).substring(1).toUpperCase()
+              fileType: path.extname(fullPath).substring(1).toUpperCase(),
+              rootId: rootId,
+              rootPath: rootDir
             };
           }
 
@@ -944,7 +1035,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
               size: stats.size,
               isBinary: false,
               isSkipped: false,
-              isDirectory: false
+              isDirectory: false,
+              rootId: rootId,
+              rootPath: rootDir
             };
           } catch (readErr) {
             // If we couldn't read as UTF-8, try to detect if it's binary
@@ -965,7 +1058,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
                   isBinary: true,
                   isSkipped: false,
                   isDirectory: false,
-                  fileType: path.extname(fullPath).substring(1).toUpperCase() || "BIN"
+                  fileType: path.extname(fullPath).substring(1).toUpperCase() || "BIN",
+                  rootId: rootId,
+                  rootPath: rootDir
                 };
               } else {
                 // Not binary but still couldn't read as UTF-8
@@ -979,7 +1074,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
                   isBinary: false,
                   isSkipped: true,
                   isDirectory: false,
-                  error: "File encoding not supported"
+                  error: "File encoding not supported",
+                  rootId: rootId,
+                  rootPath: rootDir
                 };
               }
             } catch (bufferErr) {
@@ -995,7 +1092,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
                 isBinary: false,
                 isSkipped: true,
                 isDirectory: false,
-                error: "Failed to read file: " + bufferErr.message
+                error: "Failed to read file: " + bufferErr.message,
+                rootId: rootId,
+                rootPath: rootDir
               };
             }
           }
@@ -1013,7 +1112,9 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
             isDirectory: false,
             error: err.code === 'EPERM' ? "Permission denied" : 
                    err.code === 'ENOENT' ? "File not found" : 
-                   "Could not read file"
+                   "Could not read file",
+            rootId: rootId,
+            rootPath: rootDir
           };
         }
       });
@@ -1051,6 +1152,21 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     console.log("Processing file list for folder:", folderPath);
     console.log("OS platform:", os.platform());
     console.log("Path separator:", getPathSeparator());
+
+    // Find the root ID for this folder path
+    let rootId = null;
+    const matchingRoot = rootFolders.find(root => 
+      arePathsEqual(normalizePath(root.path), normalizePath(folderPath))
+    );
+    
+    if (matchingRoot) {
+      rootId = matchingRoot.id;
+      console.log(`Found rootId ${rootId} for path ${folderPath}`);
+    } else {
+      // For backward compatibility, generate a temporary ID
+      rootId = generateRootId();
+      console.log(`No matching root found, using temporary ID: ${rootId}`);
+    }
 
     // Reset progress counters
     resetProgressCounters();
@@ -1100,7 +1216,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         });
         
         // Await the result of readFilesRecursively
-        const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true);
+        const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true, rootId);
         console.log(`Found ${files ? files.length : 0} files in ${folderPath}`);
 
         if (!files || !Array.isArray(files)) {
@@ -1142,7 +1258,9 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             error: file.error ? String(file.error) : null,
             fileType: file.fileType ? String(file.fileType) : null,
             excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault
-            isDirectory: Boolean(file.isDirectory)
+            isDirectory: Boolean(file.isDirectory),
+            rootId: file.rootId,
+            rootPath: file.rootPath
           };
         }));
 
@@ -1186,7 +1304,9 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             isBinary: file.isBinary,
             isSkipped: file.isSkipped,
             excludedByDefault: file.excludedByDefault,
-            isDirectory: file.isDirectory
+            isDirectory: file.isDirectory,
+            rootId: file.rootId,
+            rootPath: file.rootPath
           }));
 
           event.sender.send("file-list-data", minimalFiles);

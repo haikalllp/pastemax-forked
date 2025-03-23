@@ -4,7 +4,7 @@ import React, {
   memo
 } from "react";
 import { TreeItemProps, TreeNode, FileData } from "../types/FileTypes";
-import { ChevronRight, File, Folder } from "lucide-react";
+import { ChevronRight, File, Folder, FolderOpen, X } from "lucide-react";
 import * as pathUtils from "../utils/pathUtils";
 
 // Ensure we have the critical path utilities, with fallbacks if needed
@@ -30,6 +30,7 @@ const {
  * - Folder expansion/collapse
  * - Visual indicators for selection state
  * - Special cases for binary/skipped/excluded files
+ * - Root folder nodes with special styling
  */
 const TreeItem = ({
   node,
@@ -37,9 +38,10 @@ const TreeItem = ({
   toggleFileSelection,
   toggleFolderSelection,
   toggleExpanded,
-  allFiles
+  allFiles,
+  isRootNode = false
 }: TreeItemProps) => {
-  const { id, name, path, type, level, isExpanded, fileData } = node;
+  const { id, name, path, type, level, isExpanded, fileData, rootId } = node;
   const checkboxRef = useRef(null);
 
   const isSelected = type === "file" && selectedFiles.some((selectedPath) => 
@@ -95,6 +97,29 @@ const TreeItem = ({
       file.isBinary && 
       isSubPath(path, file.path)
     );
+
+  // Handle root folder node separately
+  if (type === "root") {
+    return (
+      <div className="root-folder-header">
+        <div className="root-folder-name">
+          <div
+            className={`tree-item-toggle ${isExpanded ? "expanded" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleExpanded(id);
+            }}
+            aria-label={isExpanded ? "Collapse root folder" : "Expand root folder"}
+          >
+            <ChevronRight size={16} />
+          </div>
+          <FolderOpen size={16} />
+          <span>{name}</span>
+        </div>
+        <div className="root-folder-path">{path}</div>
+      </div>
+    );
+  }
 
   return (
     <div

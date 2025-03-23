@@ -300,8 +300,15 @@ input[type="search"]:focus {
 
 .folder-info {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: 16px;
+}
+
+.folder-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .selected-folder {
@@ -315,16 +322,93 @@ input[type="search"]:focus {
   color: var(--text-secondary);
 }
 
-.select-folder-btn {
+.select-folder-btn,
+.add-another-btn {
   background-color: var(--background-primary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   padding: 8px 16px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 
-.select-folder-btn:hover {
+.select-folder-btn:hover,
+.add-another-btn:hover {
   background-color: var(--hover-color);
+}
+
+.select-folder-btn:disabled,
+.add-another-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Root folder header styles */
+.root-folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.root-folder-header:first-child {
+  margin-top: 0;
+  border-top: none;
+}
+
+.root-folder-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.root-folder-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root-folder-path {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove-root-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-root-btn:hover {
+  background-color: var(--background-tertiary);
+  color: var(--danger-color);
 }
 
 .main-content {

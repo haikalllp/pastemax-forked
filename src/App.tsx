@@ -3,9 +3,10 @@ import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
 import UserInstructions from "./components/UserInstructions";
-import { FileData } from "./types/FileTypes";
+import { FileData, RootFolder } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
+import { PlusCircle, FolderOpen } from "lucide-react";
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -62,6 +63,7 @@ declare global {
  */
 const STORAGE_KEYS = {
   SELECTED_FOLDER: "pastemax-selected-folder",
+  ROOT_FOLDERS: "pastemax-root-folders",
   SELECTED_FILES: "pastemax-selected-files",
   SORT_ORDER: "pastemax-sort-order",
   SEARCH_TERM: "pastemax-search-term",
@@ -89,9 +91,11 @@ const App = (): JSX.Element => {
   const savedSortOrder = localStorage.getItem(STORAGE_KEYS.SORT_ORDER);
   const savedSearchTerm = localStorage.getItem(STORAGE_KEYS.SEARCH_TERM);
 
-  const [selectedFolder, setSelectedFolder] = useState(
-    savedFolder as string | null
-  );
+  const [selectedFolder, setSelectedFolder] = useState(savedFolder as string | null);
+  const [rootFolders, setRootFolders] = useState(() => {
+    const savedRoots = localStorage.getItem(STORAGE_KEYS.ROOT_FOLDERS);
+    return (savedRoots ? JSON.parse(savedRoots) : []) as RootFolder[];
+  });
   const [allFiles, setAllFiles] = useState([] as FileData[]);
   const [selectedFiles, setSelectedFiles] = useState(
     savedFiles ? JSON.parse(savedFiles) : [] as string[]
@@ -356,12 +360,66 @@ const App = (): JSX.Element => {
       }
     };
 
+    // New handler for root folder added event
+    const handleRootFolderAdded = (newRoot: RootFolder) => {
+      console.log("Root folder added:", newRoot);
+      
+      setRootFolders((prevRoots: RootFolder[]) => {
+        const updatedRoots = [...prevRoots, newRoot];
+        // Save to localStorage
+        localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRoots));
+        return updatedRoots;
+      });
+      
+      // Request file list for the new root
+      setProcessingStatus({
+        status: "processing",
+        message: `Loading files from ${newRoot.name}...`,
+      });
+      window.electron.ipcRenderer.send("request-file-list", newRoot.path);
+    };
+    
+    // Handler for root folder removed event
+    const handleRootFolderRemoved = (rootId: string) => {
+      console.log("Root folder removed:", rootId);
+      
+      setRootFolders((prevRoots: RootFolder[]) => {
+        const updatedRoots = prevRoots.filter((root: RootFolder) => root.id !== rootId);
+        // Save to localStorage
+        localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRoots));
+        return updatedRoots;
+      });
+      
+      // Remove files from this root from allFiles
+      setAllFiles((prevFiles: FileData[]) => prevFiles.filter((file: FileData) => file.rootId !== rootId));
+      
+      // Update selected files
+      setSelectedFiles((prevSelected: string[]) => 
+        prevSelected.filter((filePath: string) => {
+          const file = allFiles.find((f: FileData) => f.path === filePath);
+          return file && file.rootId !== rootId;
+        })
+      );
+    };
+    
+    // Handler for root folder error
+    const handleRootFolderError = (error: { error: string, path?: string, rootId?: string }) => {
+      console.error("Root folder error:", error);
+      setProcessingStatus({
+        status: "error",
+        message: error.error,
+      });
+    };
+
+    // Add event listeners
     window.electron.ipcRenderer.on("folder-selected", handleFolderSelected);
     window.electron.ipcRenderer.on("file-list-data", handleFileListData);
-    window.electron.ipcRenderer.on(
-      "file-processing-status",
-      handleProcessingStatus,
-    );
+    window.electron.ipcRenderer.on("file-processing-status", handleProcessingStatus);
+    
+    // Add new event listeners for root folder events
+    window.electron.ipcRenderer.on("root-folder-added", handleRootFolderAdded);
+    window.electron.ipcRenderer.on("root-folder-removed", handleRootFolderRemoved);
+    window.electron.ipcRenderer.on("root-folder-error", handleRootFolderError);
 
     return () => {
       window.electron.ipcRenderer.removeListener(
@@ -376,8 +434,22 @@ const App = (): JSX.Element => {
         "file-processing-status",
         handleProcessingStatus,
       );
+      
+      // Remove root folder event listeners
+      window.electron.ipcRenderer.removeListener(
+        "root-folder-added",
+        handleRootFolderAdded,
+      );
+      window.electron.ipcRenderer.removeListener(
+        "root-folder-removed",
+        handleRootFolderRemoved,
+      );
+      window.electron.ipcRenderer.removeListener(
+        "root-folder-error",
+        handleRootFolderError,
+      );
     };
-  }, [isElectron, sortOrder, searchTerm]);
+  }, [isElectron, sortOrder, searchTerm, allFiles]);
 
   const openFolder = () => {
     if (isElectron) {
@@ -386,6 +458,27 @@ const App = (): JSX.Element => {
       window.electron.ipcRenderer.send("open-folder");
     } else {
       console.warn("Folder selection not available in browser");
+    }
+  };
+
+  // Add another root folder
+  const addRootFolder = () => {
+    if (isElectron) {
+      console.log("Adding another root folder");
+      setProcessingStatus({ status: "idle", message: "Select additional folder..." });
+      window.electron.ipcRenderer.send("add-root-folder");
+    } else {
+      console.warn("Folder selection not available in browser");
+    }
+  };
+  
+  // Remove a root folder
+  const removeRootFolder = (rootId: string) => {
+    if (isElectron) {
+      console.log("Removing root folder:", rootId);
+      window.electron.ipcRenderer.send("remove-root-folder", rootId);
+    } else {
+      console.warn("Folder removal not available in browser");
     }
   };
 
@@ -536,54 +629,59 @@ const App = (): JSX.Element => {
   // NEW: State for user instructions
   const [userInstructions, setUserInstructions] = useState("");
 
-  // Concatenate selected files content for copying,
-  // and add user instructions (wrapped in tags) at the bottom if provided.
+  // Modify getSelectedFilesContent to organize content by root
   const getSelectedFilesContent = () => {
-    // Sort selected files according to current sort order
-    const [sortKey, sortDir] = sortOrder.split("-");
-    const sortedSelected = allFiles
-      .filter((file: FileData) => 
-        selectedFiles.some((selectedPath: string) => 
-          arePathsEqual(selectedPath, file.path)
-        )
-      )
-      .sort((a: FileData, b: FileData) => {
-        let comparison = 0;
-    
-        if (sortKey === "name") {
-          comparison = a.name.localeCompare(b.name);
-        } else if (sortKey === "tokens") {
-          comparison = a.tokenCount - b.tokenCount;
-        } else if (sortKey === "size") {
-          comparison = a.size - b.size;
-        }
-    
-        return sortDir === "asc" ? comparison : -comparison;
-      });
-    
-    if (sortedSelected.length === 0) {
-      return "No files selected.";
-    }
-    
-    // Wrap user instructions if any and add to the beginning
-    const userInstructionsBlock = userInstructions.trim()
-      ? `<user_instructions>\n${userInstructions}\n</user_instructions>\n\n`
+    // Get user instructions
+    const instructionsElement = document.getElementById("user-instructions");
+    const userInstructions = instructionsElement && 'value' in instructionsElement 
+      ? (instructionsElement as HTMLTextAreaElement).value 
       : "";
     
-    let concatenatedString = userInstructionsBlock;
+    // Group selected files by root
+    const rootGroups: Record<string, FileData[]> = {};
     
-    // Add ASCII file tree if enabled
-    if (includeFileTree && selectedFolder) {
-      const asciiTree = generateAsciiFileTree(sortedSelected, selectedFolder);
-      concatenatedString += `<file_map>\n${selectedFolder}\n${asciiTree}\n</file_map>\n\n`;
-    }
-    
-    sortedSelected.forEach((file: FileData) => {
-      concatenatedString += `\n\n// ---- File: ${file.name} ----\n\n`;
-      concatenatedString += file.content;
+    selectedFiles.forEach((filePath: string) => {
+      const file = allFiles.find((f: FileData) => f.path === filePath);
+      if (file) {
+        const rootId = file.rootId || 'default';
+        if (!rootGroups[rootId]) {
+          rootGroups[rootId] = [];
+        }
+        rootGroups[rootId].push(file);
+      }
     });
     
-    return concatenatedString;
+    // Create output with root separation
+    let output = userInstructions ? `${userInstructions}\n\n` : "";
+    
+    Object.entries(rootGroups).forEach(([rootId, files]) => {
+      // Find root folder name
+      let rootName = "Root Folder";
+      const root = rootFolders.find((r: RootFolder) => r.id === rootId);
+      if (root) {
+        rootName = root.name;
+      }
+      
+      // Add root section header
+      output += `Root: ${rootName}\n`;
+      
+      // Add file tree for this root
+      const rootFiles = allFiles.filter((f: FileData) => f.rootId === rootId);
+      const rootPath = root?.path || files[0]?.rootPath;
+      if (rootPath) {
+        output += `File Structure:\n${generateAsciiFileTree(rootFiles, rootPath)}\n\n`;
+      }
+      
+      // Add selected files content
+      output += `Selected Files:\n`;
+      files.forEach(file => {
+        output += `\n---- ${file.path} ----\n${file.content}\n`;
+      });
+      
+      output += `\n`;
+    });
+    
+    return output;
   };
 
   // Handle select all files
@@ -652,13 +750,26 @@ const App = (): JSX.Element => {
               ) : (
                 <span>No folder selected</span>
               )}
-              <button
-                className="select-folder-btn"
-                onClick={openFolder}
-                disabled={processingStatus.status === "processing"}
-              >
-                Select Folder
-              </button>
+              <div className="folder-buttons">
+                <button
+                  className="select-folder-btn"
+                  onClick={openFolder}
+                  disabled={processingStatus.status === "processing"}
+                >
+                  <FolderOpen className="btn-icon" />
+                  Select Folder
+                </button>
+                {rootFolders.length > 0 && (
+                  <button
+                    className="add-another-btn"
+                    onClick={addRootFolder}
+                    disabled={processingStatus.status === "processing"}
+                  >
+                    <PlusCircle className="btn-icon" />
+                    Add Another
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -683,7 +794,10 @@ const App = (): JSX.Element => {
         {selectedFolder && (
           <div className="main-content">
             <Sidebar
+              rootFolders={rootFolders}
               selectedFolder={selectedFolder}
+              openFolder={openFolder}
+              addRootFolder={addRootFolder}
               allFiles={allFiles}
               selectedFiles={selectedFiles}
               toggleFileSelection={toggleFileSelection}
