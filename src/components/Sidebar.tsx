@@ -63,6 +63,7 @@ const Sidebar = ({
   // State for managing the file tree and UI
   const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
+  const [treeLoadingMessage, setTreeLoadingMessage] = useState("Building file tree...");
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -108,9 +109,12 @@ const Sidebar = ({
       return;
     }
 
+    // Reset the loading state when starting to build a new tree
+    setIsTreeBuildingComplete(false);
+    setTreeLoadingMessage("Building file tree...");
+
     const buildTree = () => {
       console.log("Building file tree from", allFiles.length, "files");
-      setIsTreeBuildingComplete(false);
 
       try {
         // First, find the root folder item if it exists
@@ -131,6 +135,7 @@ const Sidebar = ({
           return;
         }
         
+        setTreeLoadingMessage("Finding root folder...");
         const rootFolderItem = allFiles.find(file => 
           file && file.path && file.isDirectory && arePathsEqual(normalizePath(file.path), normalizedSelectedFolder)
         );
@@ -154,6 +159,7 @@ const Sidebar = ({
         
         if (rootFolderItem) {
           // If we found a root folder item, use it as the top-level node
+          setTreeLoadingMessage("Creating root node...");
           const rootNode: TreeNode = {
             id: `node-${normalizedSelectedFolder}`,
             name: rootFolderItem.name || basename(normalizedSelectedFolder),
@@ -166,16 +172,22 @@ const Sidebar = ({
           };
           
           // Then build the rest of the tree under this root
+          setTreeLoadingMessage("Processing child folders and files...");
           buildChildrenTree(rootNode, allFiles, normalizedSelectedFolder);
           rootTree = [rootNode];
           console.log("Built tree with root node:", rootNode.name);
         } else {
           // If no root folder was found, build the tree from the files directly
           console.log("No root folder item found, building from direct file list");
+          setTreeLoadingMessage("Organizing files into tree structure...");
           const fileMap: Record<string, any> = {};
           
           // First pass: create directories and files
-          allFiles.forEach((file) => {
+          allFiles.forEach((file, index) => {
+            if (index % 100 === 0) {
+              setTreeLoadingMessage(`Processing files... ${Math.round((index / allFiles.length) * 100)}%`);
+            }
+            
             if (!file.path) {
               console.log("Skipping file with no path");
               return;
@@ -249,11 +261,13 @@ const Sidebar = ({
           });
           
           // Convert to TreeNode array
+          setTreeLoadingMessage("Converting tree map to nodes...");
           rootTree = convertToTreeNodes(fileMap);
           console.log("Built tree from fileMap, found nodes:", rootTree.length);
         }
 
         // Sort the top level (directories first, then by name)
+        setTreeLoadingMessage("Sorting tree nodes...");
         const sortedTree = rootTree.sort((a, b) => {
           if (a.type === "directory" && b.type === "file") return -1;
           if (a.type === "file" && b.type === "directory") return 1;
@@ -276,12 +290,16 @@ const Sidebar = ({
         // On error, try to build a simple flat tree as a fallback
         try {
           console.log("Attempting to build a simple flat tree as fallback");
+          setTreeLoadingMessage("Building simplified view (fallback mode)...");
           const flatTree = allFiles
             .filter(file => 
               !arePathsEqual(normalizePath(file.path), selectedFolder ? normalizePath(selectedFolder) : '') && 
               !file.excludedByDefault // Filter out excluded files
             )
             .map((file, index) => {
+              if (index % 100 === 0) {
+                setTreeLoadingMessage(`Building simplified view... ${Math.round((index / allFiles.length) * 100)}%`);
+              }
               return {
                 id: `node-${file.path}`,
                 name: file.name,
@@ -306,6 +324,7 @@ const Sidebar = ({
           console.error("Fallback tree building also failed:", fallbackError);
           setFileTree([]);
           setIsTreeBuildingComplete(true);
+          setTreeLoadingMessage("Error building file tree");
         }
       }
     };
@@ -354,7 +373,11 @@ const Sidebar = ({
       });
       
       // Create tree nodes for children
-      parentNode.children = sortedChildren.map((file: any) => {
+      parentNode.children = sortedChildren.map((file: any, index: number) => {
+        if (index % 50 === 0 && sortedChildren.length > 100) {
+          setTreeLoadingMessage(`Processing folder ${parentNode.name}: ${Math.round((index / sortedChildren.length) * 100)}%`);
+        }
+        
         if (!file || !file.path) {
           console.warn("Skipping invalid file in children map");
           return null;
@@ -385,7 +408,12 @@ const Sidebar = ({
 
     // Helper function to convert the file map to TreeNode array
     const convertToTreeNodes = (node: Record<string, any>, level = 0): TreeNode[] => {
-      return Object.keys(node).map((key) => {
+      const keys = Object.keys(node);
+      return keys.map((key, index) => {
+        if (index % 50 === 0 && keys.length > 100) {
+          setTreeLoadingMessage(`Building tree structure: ${Math.round((index / keys.length) * 100)}%`);
+        }
+        
         const item = node[key];
 
         if (item.type === "file") {
@@ -574,7 +602,15 @@ const Sidebar = ({
         ) : (
           <div className="tree-loading">
             <div className="spinner"></div>
-            <span>Building file tree...</span>
+            <span>{treeLoadingMessage}</span>
+            <div className="loading-progress-indicator"></div>
+            <button
+              className="cancel-loading-btn"
+              onClick={() => window.electron.ipcRenderer.send("cancel-directory-loading")}
+              title="Cancel loading"
+            >
+              Cancel
+            </button>
           </div>
         )
       ) : (

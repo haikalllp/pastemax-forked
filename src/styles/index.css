@@ -77,6 +77,8 @@
   /* Accent & UI Colors */
   --accent-blue: #0e639c;           /* Primary accent for focus/active states */
   --border-color: #e0e0e0;          /* Borders, dividers, and separators */
+  --primary-color: #0e639c;         /* Primary brand color */
+  --primary-color-rgb: 14, 99, 156; /* RGB values of primary color for rgba() */
   
   /* Typography Colors */
   --text-primary: #000000;          /* Main text color */
@@ -107,6 +109,8 @@
   
   /* Accent & UI Colors - Adjusted for dark mode */
   --accent-blue: #0e639c;           /* Same accent color for consistency */
+  --primary-color: #4d9bd6;         /* Lighter primary color for dark theme */
+  --primary-color-rgb: 77, 155, 214; /* RGB values for dark theme primary color */
   --border-color: #3e3e42;          /* Darker borders for separation */
   
   /* Typography Colors - Higher contrast for readability */
@@ -407,9 +411,59 @@ input[type="search"]:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
-  gap: 12px;
+  padding: 20px;
+  margin: 10px;
+  background-color: rgba(var(--primary-color-rgb), 0.05);
+  border-radius: 6px;
+  font-weight: 500;
   color: var(--text-secondary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tree-loading span {
+  margin: 12px 0;
+  text-align: center;
+}
+
+.loading-progress-indicator {
+  width: 100%;
+  height: 4px;
+  background-color: rgba(var(--primary-color-rgb), 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.loading-progress-indicator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  background-color: rgba(var(--primary-color-rgb), 0.7);
+  border-radius: 2px;
+  animation: loading-progress 1.5s infinite ease-in-out;
+}
+
+.cancel-loading-btn {
+  margin-top: 12px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(var(--primary-color-rgb), 0.2);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.cancel-loading-btn:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.3);
+}
+
+.cancel-loading-btn:active {
+  background-color: rgba(var(--primary-color-rgb), 0.4);
 }
 
 .tree-loading .spinner {
@@ -796,18 +850,34 @@ input[type="search"]:focus {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 12px;
+  padding: 16px;
   background-color: var(--background-secondary);
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+  position: relative;
+  z-index: 20;
+}
+
+.processing-indicator span {
+  color: var(--text-primary);
 }
 
 .spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--primary-color);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
+}
+
+.tree-loading .spinner {
+  margin-right: 8px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--primary-color);
+  border-top-color: transparent;
 }
 
 @keyframes spin {
@@ -1290,3 +1360,12 @@ input[type="text"].search-input:focus {
  * Various utility classes for common style patterns
  * Can be combined with component classes for specific effects
  */
+
+@keyframes loading-progress {
+  0% {
+    left: -50%;
+  }
+  100% {
+    left: 100%;
+  }
+}

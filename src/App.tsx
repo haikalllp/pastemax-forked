@@ -106,7 +106,7 @@ const App = (): JSX.Element => {
   const [displayedFiles, setDisplayedFiles] = useState([] as FileData[]);
   const [processingStatus, setProcessingStatus] = useState(
     { status: "idle", message: "" } as {
-      status: "idle" | "processing" | "complete" | "error";
+      status: "idle" | "processing" | "complete" | "error" | "cancelled";
       message: string;
     }
   );
@@ -327,11 +327,33 @@ const App = (): JSX.Element => {
     };
 
     const handleProcessingStatus = (status: {
-      status: "idle" | "processing" | "complete" | "error";
+      status: "idle" | "processing" | "complete" | "error" | "cancelled";
       message: string;
     }) => {
       console.log("Processing status:", status);
+      
+      // Always update the processing status immediately
       setProcessingStatus(status);
+      
+      // If we're completing, add a slight delay before updating state
+      // This ensures UI transitions are smooth and user sees completion
+      if (status.status === "complete") {
+        // Keep the loading UI visible for a moment so user can see completion message
+        setTimeout(() => {
+          setProcessingStatus({
+            status: "idle",
+            message: status.message || "Processing complete"
+          });
+        }, 800); // 800ms delay gives user time to see the completion message
+      } else if (status.status === "cancelled") {
+        // Show cancelled status briefly before returning to idle
+        setTimeout(() => {
+          setProcessingStatus({
+            status: "idle",
+            message: ""
+          });
+        }, 1500);
+      }
     };
 
     window.electron.ipcRenderer.on("folder-selected", handleFolderSelected);

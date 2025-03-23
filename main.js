@@ -26,6 +26,7 @@ const {
 // Global variables for directory loading control
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
+let isHandlingGitignore = false; // New flag to track gitignore processing specifically
 const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
 
 // Add a cache for gitignore file paths to avoid rescanning
@@ -428,10 +429,42 @@ ipcMain.on("open-folder", async (event) => {
  * Finds and consolidates patterns from all .gitignore files in the project
  * 
  * @param {string} rootDir - The root directory containing .gitignore files
+ * @param {Electron.WebContents|Electron.IpcMainEvent} [sender] - Event or WebContents to send status updates to
  * @returns {Promise<object>} - Configured ignore filter
  */
-async function loadGitignore(rootDir) {
+async function loadGitignore(rootDir, sender) {
   console.log(`Loading gitignore patterns for ${rootDir}`);
+  
+  // Only send status updates if we're still in the initial loading phase or explicitly handling gitignore files
+  const shouldSendUpdates = isLoadingDirectory || isHandlingGitignore;
+  
+  // Set the gitignore handling flag
+  isHandlingGitignore = true;
+  
+  // Send processing status update if we have a sender and should send updates
+  const sendStatusUpdate = (message) => {
+    try {
+      if (sender && shouldSendUpdates) {
+        const statusUpdate = {
+          status: "processing",
+          message: message
+        };
+        
+        // Handle both WebContents and IpcMainEvent objects
+        if (sender.send) {
+          sender.send("file-processing-status", statusUpdate);
+        } else if (sender.webContents && sender.webContents.send) {
+          sender.webContents.send("file-processing-status", statusUpdate);
+        }
+      }
+    } catch (err) {
+      console.error("Error sending gitignore status update:", err);
+    }
+  };
+  
+  if (shouldSendUpdates) {
+    sendStatusUpdate("Finding and parsing .gitignore files...");
+  }
   
   // Create a default ignore filter
   let ig;
@@ -440,6 +473,8 @@ async function loadGitignore(rootDir) {
     ig = ignore();
   } catch (err) {
     console.error("Error creating ignore filter:", err);
+    // Reset the gitignore handling flag
+    isHandlingGitignore = false;
     // Return a simple fallback filter that doesn't ignore anything
     return {
       ignores: (path) => {
@@ -454,80 +489,51 @@ async function loadGitignore(rootDir) {
     rootDir = ensureAbsolutePath(rootDir);
     
     // Step 1: Find all .gitignore files in the project
-    const gitignoreFiles = await findAllGitignoreFiles(rootDir);
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Scanning for .gitignore files...");
+    }
+    const gitignoreFiles = await findAllGitignoreFiles(rootDir, 10, shouldSendUpdates ? sender : null);
     
     // Step 2: Consolidate patterns from all gitignore files
     let consolidatedPatterns = [];
     if (gitignoreFiles.length > 0) {
+      if (shouldSendUpdates) {
+        sendStatusUpdate(`Processing ${gitignoreFiles.length} .gitignore files...`);
+      }
       consolidatedPatterns = await consolidateIgnorePatterns(gitignoreFiles, rootDir);
     } else {
       console.log(`No .gitignore files found in ${rootDir}, using only default ignores`);
     }
     
     // Step 3: Merge with default ignores and excluded files
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Finalizing file exclusion patterns...");
+    }
     const finalPatterns = mergeWithDefaultIgnores(consolidatedPatterns);
     
     // Step 4: Add all patterns to the ignore filter
     ig.add(finalPatterns);
     
     console.log(`Ignore filter configured with ${finalPatterns.length} patterns`);
+    
+    // Reset the gitignore handling flag
+    isHandlingGitignore = false;
+    
+    return ig;
   } catch (err) {
     console.error("Error configuring ignore filter:", err);
-    // Add basic defaults to be safe
-    try {
-      // Use our centralized default ignores from excluded-files.js
-      ig.add(defaultIgnorePatterns || [
-        "node_modules",
-        ".git",
-        "*.log",
-        "dist",
-        "build"
-      ]);
-      console.log("Using fallback patterns due to error");
-    } catch (fallbackErr) {
-      console.error("Error adding fallback patterns:", fallbackErr);
-    }
-  }
-
-  // Wrap the ignores function to handle errors and normalize paths
-  const originalIgnores = ig.ignores;
-  ig.ignores = (filePath) => {
-    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
-      console.warn("Ignores called with invalid path:", filePath);
-      return false;
-    }
     
-    try {
-      // Make path relative using our utility function
-      const relativePath = makeRelativePath(filePath);
-      
-      // For debugging specific tricky paths
-      if (relativePath.includes('node_modules') || relativePath.startsWith('.git/')) {
-        console.log(`Checking path ${relativePath}, original path: ${filePath}`);
+    // Reset the gitignore handling flag
+    isHandlingGitignore = false;
+    
+    // Return a simple fallback filter that doesn't ignore anything
+    return {
+      ignores: (path) => {
+        console.log("Using fallback ignore filter with error:", path);
+        return false;
       }
-      
-      const shouldIgnore = originalIgnores.call(ig, relativePath);
-      
-      // Debug log ignored files
-      if (shouldIgnore) {
-        // Only log certain interesting files/patterns to avoid log spam
-        if (relativePath.includes('node_modules') || 
-            relativePath.startsWith('.git/') || 
-            relativePath.endsWith('.min.js') ||
-            relativePath.includes('build/') ||
-            relativePath.includes('dist/')) {
-          console.log(`Ignoring file: ${relativePath}`);
-        }
-      }
-      
-      return shouldIgnore;
-    } catch (err) {
-      console.error(`Error in ignores for path '${filePath}':`, err);
-      return false;
-    }
-  };
-
-  return ig;
+    };
+  }
 }
 
 // Check if file is binary based on extension
@@ -620,7 +626,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   
   // If ignoreFilter wasn't provided, load it
   if (!ignoreFilter) {
-    ignoreFilter = await loadGitignore(rootDir);
+    ignoreFilter = await loadGitignore(rootDir, null);
   }
 
   let results = [];
@@ -1028,8 +1034,9 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     // Reset progress counters
     resetProgressCounters();
     
-    // Set the loading flag to true
+    // Set the loading flag to true - this is a significant operation
     isLoadingDirectory = true;
+    isHandlingGitignore = false; // Reset gitignore flag to start fresh
     
     // Get the current BrowserWindow
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -1048,16 +1055,28 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
       try {
         console.log("Starting directory scan, isLoadingDirectory =", isLoadingDirectory);
         
+        // Set gitignore flag to true before loading gitignore
+        isHandlingGitignore = true;
+        
         // Initialize the gitignore filter once to avoid re-reading it for each directory
         // This is important to do first as it determines what files we'll skip entirely
         console.log("Initializing gitignore filters before file traversal");
-        const ignoreFilter = await loadGitignore(folderPath);
+        const ignoreFilter = await loadGitignore(folderPath, event);
+        
+        // Reset gitignore handling flag after loading
+        isHandlingGitignore = false;
         
         // Log some info about the ignore filter to help with debugging
         console.log("Ignore filter initialized, proceeding with directory traversal");
         console.log("Note: Files in ignored directories will be completely skipped");
         console.log("      Binary files in non-ignored directories will be included but tagged as binary");
         console.log("      Priority: 1. Directory ignores, 2. File ignores, 3. Binary detection");
+        
+        // Update status now that gitignore is done
+        event.sender.send("file-processing-status", {
+          status: "processing",
+          message: "Reading files...",
+        });
         
         // Await the result of readFilesRecursively
         const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true);
@@ -1072,10 +1091,10 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
           return;
         }
 
-        // Update with processing complete status
+        // Update with processing near-complete status 
         event.sender.send("file-processing-status", {
-          status: "complete",
-          message: `Found ${files.length} files (processed ${totalFilesProcessed} files in ${totalDirectoriesProcessed} directories)`,
+          status: "processing",
+          message: `Finalizing ${files.length} files...`,
         });
 
         // Process the files to ensure they're serializable
@@ -1126,6 +1145,13 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             }
           }
           
+          // First, send a final processing status update
+          event.sender.send("file-processing-status", {
+            status: "complete",
+            message: `Found ${serializableFiles.length} files (processed ${totalFilesProcessed} files in ${totalDirectoriesProcessed} directories)`,
+          });
+          
+          // Then send the actual file data
           event.sender.send("file-list-data", serializableFiles);
         } catch (sendErr) {
           console.error("Error sending file data:", sendErr);
@@ -1144,9 +1170,16 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
 
           event.sender.send("file-list-data", minimalFiles);
         }
+      } catch (error) {
+        console.error("Error in file processing:", error);
+        event.sender.send("file-processing-status", {
+          status: "error",
+          message: `Error: ${error.message || "Unknown error during file processing"}`,
+        });
       } finally {
         // Clear the loading flag when done
         isLoadingDirectory = false;
+        isHandlingGitignore = false;
         if (loadingTimeoutId) {
           clearTimeout(loadingTimeoutId);
           loadingTimeoutId = null;
@@ -1159,6 +1192,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
   } catch (err) {
     console.error("Error processing file list:", err);
     isLoadingDirectory = false;
+    isHandlingGitignore = false;
     event.sender.send("file-processing-status", {
       status: "error",
       message: `Error: ${err.message}`,
@@ -1230,7 +1264,7 @@ async function shouldExcludeByDefault(filePath, rootDir) {
     }
     
     // Load gitignore patterns for this root dir
-    const gitignoreFilter = await loadGitignore(rootDir);
+    const gitignoreFilter = await loadGitignore(rootDir, null);
     
     // Check if the file is ignored by gitignore patterns
     if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function') {
@@ -1456,15 +1490,44 @@ async function checkGitignoreFilesChanged(rootDir) {
  * Find all .gitignore files in a project directory structure
  * @param {string} rootDir - The root directory to start searching from
  * @param {number} maxDepth - Maximum depth to search (default: 10)
+ * @param {Electron.WebContents|Electron.IpcMainEvent} [sender] - Event or WebContents to send status updates to
  * @returns {Promise<Array<string>>} - Array of paths to .gitignore files
  */
-async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
+async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
   console.log(`Finding all .gitignore files in ${rootDir} (max depth: ${maxDepth})`);
+  
+  // Only send updates if we're in initial loading or explicitly handling gitignore
+  const shouldSendUpdates = isLoadingDirectory || isHandlingGitignore;
+  
+  // Send processing status update if we have a sender and should send updates
+  const sendStatusUpdate = (message) => {
+    try {
+      if (sender && shouldSendUpdates) {
+        const statusUpdate = {
+          status: "processing",
+          message: message
+        };
+        
+        // Handle both WebContents and IpcMainEvent objects
+        if (sender.send) {
+          sender.send("file-processing-status", statusUpdate);
+        } else if (sender.webContents && sender.webContents.send) {
+          sender.webContents.send("file-processing-status", statusUpdate);
+        }
+      }
+    } catch (err) {
+      console.error("Error sending gitignore status update:", err);
+    }
+  };
   
   // Check the cache first
   const cacheKey = rootDir;
   if (gitignoreCache.has(cacheKey)) {
     const { timestamp, files } = gitignoreCache.get(cacheKey);
+    
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Checking for changes in .gitignore files...");
+    }
     
     // Check if files have been modified
     const filesChanged = await checkGitignoreFilesChanged(rootDir);
@@ -1476,13 +1539,23 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
     }
     if (filesChanged) {
       console.log(`Gitignore files changed, rescanning for ${rootDir}`);
+      if (shouldSendUpdates) {
+        sendStatusUpdate("Detected changes in .gitignore files, rescanning...");
+      }
     } else {
       console.log(`Cache expired for ${rootDir}, rescanning for gitignore files`);
+      if (shouldSendUpdates) {
+        sendStatusUpdate("Refreshing .gitignore cache...");
+      }
     }
   }
 
   const gitignoreFiles = [];
   const dirsToSkip = new Set(SKIP_DIRS);
+  
+  if (shouldSendUpdates) {
+    sendStatusUpdate("Scanning directories for .gitignore files...");
+  }
   
   // Helper function to recursively find gitignore files
   async function findGitignoreInDir(dir, currentDepth = 0) {
@@ -1490,20 +1563,30 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
       return; // Stop if we've reached the maximum depth
     }
     
+    // Check if we should skip this directory
+    const dirName = basename(dir);
+    if (dirsToSkip.has(dirName)) {
+      return; // Skip this directory
+    }
+    
     try {
-      const dirEntries = await fs.promises.readdir(dir, { withFileTypes: true });
-      
       // Check if there's a .gitignore file in this directory
       const gitignorePath = safePathJoin(dir, '.gitignore');
       try {
         await fs.promises.access(gitignorePath, fs.constants.F_OK);
         gitignoreFiles.push(gitignorePath);
-      } catch (err) {
+        if (shouldSendUpdates) {
+          sendStatusUpdate(`Found .gitignore in ${dirName}`);
+        }
+      } catch (e) {
         // No .gitignore in this directory, continue
       }
       
+      // Read the directory entries
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      
       // Process subdirectories
-      for (const entry of dirEntries) {
+      for (const entry of entries) {
         if (entry.isDirectory() && !dirsToSkip.has(entry.name)) {
           await findGitignoreInDir(safePathJoin(dir, entry.name), currentDepth + 1);
         }
@@ -1513,16 +1596,27 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
     }
   }
   
-  await findGitignoreInDir(rootDir);
-  
-  // Cache the results
-  gitignoreCache.set(cacheKey, {
-    timestamp: Date.now(),
-    files: gitignoreFiles
-  });
-  
-  console.log(`Found ${gitignoreFiles.length} .gitignore files in ${rootDir}`);
-  return gitignoreFiles;
+  try {
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Starting deep scan for .gitignore files...");
+    }
+    await findGitignoreInDir(rootDir);
+    
+    // Update the cache with the newly found files
+    gitignoreCache.set(cacheKey, {
+      timestamp: Date.now(),
+      files: gitignoreFiles
+    });
+    
+    console.log(`Found ${gitignoreFiles.length} .gitignore files in ${rootDir}`);
+    return gitignoreFiles;
+  } catch (error) {
+    console.error("Error finding gitignore files:", error);
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Error finding .gitignore files");
+    }
+    return [];
+  }
 }
 
 /**
@@ -1684,3 +1778,24 @@ function _isValidPath(pathToCheck) {
     return false;
   }
 }
+
+// Handle directory loading cancellation
+ipcMain.on("cancel-directory-loading", (event) => {
+  console.log("Directory loading cancelled by user");
+  
+  // Set the loading flag to false to stop any ongoing operations
+  isLoadingDirectory = false;
+  isHandlingGitignore = false;
+  
+  // Clear any loading timeout
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+  
+  // Notify the renderer that the operation was cancelled
+  event.sender.send("file-processing-status", {
+    status: "cancelled",
+    message: "Operation cancelled by user",
+  });
+});
