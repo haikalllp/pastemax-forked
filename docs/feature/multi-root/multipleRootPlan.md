@@ -71,27 +71,39 @@ Root Folder 2 Selected File Contents
 ---
 
 ### 2. Frontend Modifications (Sidebar.tsx)
-**Objective:** Update the UI to support multiple root folders, including the "Add Another" button and distinct file trees.
+**Objective:** Update the UI to support multiple root folders while preserving the current sidebar UI structure and functionality.
 
 - [ ] **Update State**
-- [ ] Modify `SidebarProps` in `FileTypes.ts` to use `selectedFolders: string[]`.
-- [ ] Update `Sidebar.tsx` to track multiple roots with `selectedFolders`.
+- [ ] Modify `SidebarProps` in `FileTypes.ts` to use `rootFolders: RootFolder[]` instead of `selectedFolders`.
+- [ ] Update `Sidebar.tsx` to track multiple roots while maintaining current tree view.
+- [ ] Preserve existing tree item UI and interaction patterns.
 - Progress: Not started.
 
 - [ ] **Add "Add Another" Button**
 - [ ] Add button next to "Select Folder" with `disabled={!hasImportedFolder}`.
 - [ ] Handle clicks by triggering `openFolder`.
+- [ ] Maintain consistent button styling with existing UI.
 - Progress: Not started.
 
-- [ ] **Build Separate Trees**
-- [ ] Group files by `rootId` and build separate `TreeNode` arrays.
-- [ ] Render each root’s tree distinctly in the sidebar.
+- [ ] **Enhance Tree Structure**
+- [ ] Add root folder headers as special tree nodes.
+- [ ] Preserve current TreeItem component functionality.
+- [ ] Add visual distinction for root nodes without breaking tree hierarchy.
+- [ ] Maintain existing expand/collapse behavior.
 - Progress: Not started.
 
 **TODO:**
-- Update `FileTypes.ts` with `selectedFolders`.
-- Add "Add Another" button with conditional disabling.
-- Implement logic to render multiple root trees in the sidebar.
+- Update `FileTypes.ts` with root folder types.
+- Add "Add Another" button while preserving header layout.
+- Enhance tree building logic to support root sections.
+- Ensure backwards compatibility with single root usage.
+
+**UI Preservation Notes:**
+- Keep current TreeItem component styling and behavior
+- Maintain existing indentation and hierarchy
+- Preserve current selection mechanics
+- Keep file/folder icons and interaction patterns
+- Retain current expand/collapse animations
 
 ---
 
@@ -123,16 +135,31 @@ Root Folder 2 Selected File Contents
 ---
 
 ### 5. Styling Adjustments
-**Objective:** Visually distinguish root folders and disable "Add Another" appropriately.
+**Objective:** Visually distinguish root folders while maintaining the current UI aesthetics.
 
 - [ ] **CSS Updates**
-- [ ] Style level-0 tree items (root folders) with borders or bold text.
-- [ ] Add disabled styles for "Add Another" button.
+- [ ] Add subtle visual distinction for root sections (e.g., background shade, border).
+- [ ] Style root headers to be visually distinct but consistent with current theme.
+- [ ] Preserve existing TreeItem styles and interactions.
+- [ ] Add disabled styles for "Add Another" button matching current button styles.
 - Progress: Not started.
 
 **TODO:**
-- Write CSS rules for root folder distinction.
-- Test styling with multiple roots.
+- Write CSS rules for root distinction that complement existing styles.
+- Test styling with multiple roots ensuring consistency.
+- Verify dark/light theme compatibility.
+- Maintain current hover and selection states.
+
+---
+
+## UI/UX Guidelines
+- Maintain current sidebar width and scrolling behavior
+- Keep existing file tree interactions and animations
+- Use subtle visual cues for root separation
+- Preserve current selection highlighting
+- Keep consistent spacing and indentation
+- Maintain current theme compatibility
+- Ensure smooth transitions between states
 
 ---
 
@@ -179,7 +206,15 @@ Root Folder 2 Selected File Contents
 - **Next Steps:**
 1. Start with `FileTypes.ts` updates (Step 4) for foundational changes.
 2. Implement backend changes in `main.js` (Step 1).
-3. Update frontend in `Sidebar.tsx` (Step 2).
+3. Update frontend in `Sidebar.tsx` (Step 2) while preserving current UI.
+4. Add root distinction styling (Step 5).
+5. Update copyable output format (Step 3).
+
+**Implementation Priority:**
+1. Core functionality with UI preservation
+2. Root folder distinction
+3. Multi-root management
+4. Enhanced features and polish
 
 ---
 

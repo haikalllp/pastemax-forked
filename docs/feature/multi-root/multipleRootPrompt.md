@@ -9,5 +9,10 @@ If chosen, file tree corresponding to the root should also show for each of the 
 The rest of the functionality should remain the same.
 
 For the UI strategically design a modern simple design that'll fit the current theme, and ensure it is compatible with dark and white theme.
+For UI libraries you can use components from "lucide-react"
 
 Use sequential thinking to understand the code base, then develop a concrete plan using start_planning.
+
+Note: remember to reserve the current tree side bar UI, just make it support for multiple roots now and make roots distinguishable.
+
+Update @multipleRootPlan.md if you have any updates and improvement for it, after that we can proceed with implementation following progress tracking.
