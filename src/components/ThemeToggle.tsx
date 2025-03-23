@@ -1,11 +1,12 @@
 import React, { useEffect } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { Sun, Moon, Monitor } from "lucide-react";
 
 // Check if running in Electron environment
 const isElectron = window.electron !== undefined;
 
-// Simple text-based theme toggle component
-const ThemeToggle = () => {
+// Theme toggle component with SVG icons
+const ThemeToggle = (): JSX.Element => {
   const { theme, currentTheme, setTheme } = useTheme();
   
   // Send initial theme to main process when component mounts
@@ -25,8 +26,7 @@ const ThemeToggle = () => {
         onClick={() => setTheme("light")}
         title="Light Mode"
       >
-        {/* Unicode sun symbol instead of SVG */}
-        <span aria-hidden="true">☀️</span>
+        <Sun size={16} />
         <span>Light</span>
       </button>
       <button
@@ -34,8 +34,7 @@ const ThemeToggle = () => {
         onClick={() => setTheme("dark")}
         title="Dark Mode"
       >
-        {/* Unicode moon symbol instead of SVG */}
-        <span aria-hidden="true">🌙</span>
+        <Moon size={16} />
         <span>Dark</span>
       </button>
       <button
@@ -43,8 +42,7 @@ const ThemeToggle = () => {
         onClick={() => setTheme("system")}
         title="Use System Settings"
       >
-        {/* Unicode monitor symbol instead of SVG */}
-        <span aria-hidden="true">🖥️</span>
+        <Monitor size={16} />
         <span>Auto</span>
       </button>
     </div>
