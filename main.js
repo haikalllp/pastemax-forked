@@ -14,6 +14,37 @@ let mainWindow = null;
 // Track current theme for DevTools sync
 let currentTheme = 'light';
 
+// Global state to track directory loading progress
+let totalFilesProcessed = 0;
+let totalFilesFound = 0;
+let totalDirectoriesProcessed = 0;
+let totalDirectoriesFound = 0;
+let isDeepScanEnabled = true; // Enable this for thorough scanning, can be disabled for faster superficial scans
+
+// List of directories that should be completely skipped during traversal
+// These are directories that often cause performance issues and don't provide useful content
+const SKIP_DIRS = [
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.next',
+  '.nuxt',
+  'vendor',
+  '.gradle',
+  'target',
+  'android/app/build',
+  'ios/build',
+  '__pycache__',
+  'venv',
+  '.venv',
+  '.bundle',
+  '.cache',
+  'coverage',
+  '.idea',
+  '.vscode'
+];
+
 /**
  * Enhanced path handling functions for cross-platform compatibility
  */
@@ -513,6 +544,65 @@ function loadGitignore(rootDir) {
     rootDir = ensureAbsolutePath(rootDir);
     const gitignorePath = safePathJoin(rootDir, ".gitignore");
 
+    // More comprehensive default ignores that are common
+    const defaultIgnores = [
+      // Version control
+      ".git/**",
+      ".svn/**",
+      ".hg/**",
+      ".bzr/**",
+      "CVS/**",
+      
+      // Node/NPM
+      "node_modules/**",
+      "npm-debug.log*",
+      "yarn-debug.log*",
+      "yarn-error.log*",
+      "package-lock.json",
+      "yarn.lock",
+      
+      // Common build directories
+      "dist/**",
+      "build/**",
+      "out/**",
+      ".next/**",
+      ".nuxt/**",
+      "target/**",
+      "bin/**",
+      "obj/**",
+      
+      // IDE and editor files
+      ".idea/**",
+      ".vscode/**",
+      "*.swp",
+      "*.swo",
+      ".DS_Store",
+      "Thumbs.db",
+      "desktop.ini",
+      
+      // Python related
+      "__pycache__/**",
+      "*.pyc",
+      "*.pyo",
+      "*.pyd",
+      ".pytest_cache/**",
+      ".venv/**",
+      "venv/**",
+      
+      // Log files
+      "logs/**",
+      "*.log",
+      
+      // Dependency directories for other languages
+      "vendor/**",   // PHP/Go
+      ".bundle/**",  // Ruby
+      ".gradle/**"   // Gradle
+    ];
+
+    // Track which patterns were actually loaded
+    let loadedPatternsCount = 0;
+    let addedDefaultPatternsCount = 0;
+
     if (fs.existsSync(gitignorePath)) {
       try {
         const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
@@ -524,31 +614,25 @@ function loadGitignore(rootDir) {
           // Ensure forward slashes in patterns for cross-platform compatibility
           .map(pattern => normalizePath(pattern));
 
-        console.log(`Loaded ${normalizedPatterns.length} patterns from .gitignore`);
+        loadedPatternsCount = normalizedPatterns.length;
+        console.log(`Loaded ${normalizedPatterns.length} patterns from .gitignore in ${rootDir}`);
+        
+        // Log some sample patterns for debugging
+        if (normalizedPatterns.length > 0) {
+          console.log("Sample gitignore patterns:", normalizedPatterns.slice(0, 5));
+        }
+        
         ig.add(normalizedPatterns);
       } catch (err) {
         console.error("Error reading .gitignore:", err);
       }
+    } else {
+      console.log(`No .gitignore found in ${rootDir}, using only default ignores`);
     }
 
-    // Add some default ignores that are common
-    const defaultIgnores = [
-      ".git",
-      "node_modules",
-      ".DS_Store",
-      // Add Windows-specific files to ignore
-      "Thumbs.db",
-      "desktop.ini",
-      // Add common IDE files
-      ".idea",
-      ".vscode",
-      // Add common build directories
-      "dist",
-      "build",
-      "out"
-    ];
-
+    // Add the default ignores
     ig.add(defaultIgnores);
+    addedDefaultPatternsCount = defaultIgnores.length;
     console.log(`Added ${defaultIgnores.length} default ignore patterns`);
 
     // Normalize and add the excludedFiles patterns
@@ -559,25 +643,46 @@ function loadGitignore(rootDir) {
     } else {
       console.warn("excludedFiles is not an array, skipping");
     }
+
+    console.log(`Total patterns loaded: ${loadedPatternsCount + addedDefaultPatternsCount + (Array.isArray(excludedFiles) ? excludedFiles.length : 0)}`);
   } catch (err) {
     console.error("Error configuring ignore filter:", err);
   }
 
   // Wrap the ignores function to handle errors and normalize paths
   const originalIgnores = ig.ignores;
-  ig.ignores = (path) => {
-    if (!path || typeof path !== 'string' || path.trim() === '') {
-      console.warn("Ignores called with invalid path:", path);
+  ig.ignores = (filePath) => {
+    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
+      console.warn("Ignores called with invalid path:", filePath);
       return false;
     }
     
     try {
       // Make path relative using our utility function
-      const relativePath = makeRelativePath(path);
+      const relativePath = makeRelativePath(filePath);
       
-      return originalIgnores.call(ig, relativePath);
+      // For debugging specific tricky paths
+      if (relativePath.includes('node_modules') || relativePath.startsWith('.git/')) {
+        console.log(`Checking path ${relativePath}, original path: ${filePath}`);
+      }
+      
+      const shouldIgnore = originalIgnores.call(ig, relativePath);
+      
+      // Debug log ignored files
+      if (shouldIgnore) {
+        // Only log certain interesting files/patterns to avoid log spam
+        if (relativePath.includes('node_modules') || 
+            relativePath.startsWith('.git/') || 
+            relativePath.endsWith('.min.js') ||
+            relativePath.includes('build/') ||
+            relativePath.includes('dist/')) {
+          console.log(`Ignoring file: ${relativePath}`);
+        }
+      }
+      
+      return shouldIgnore;
     } catch (err) {
-      console.error(`Error in ignores for path '${path}':`, err);
+      console.error(`Error in ignores for path '${filePath}':`, err);
       return false;
     }
   };
@@ -589,6 +694,37 @@ function loadGitignore(rootDir) {
 function isBinaryFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return BINARY_EXTENSIONS.includes(ext);
+}
+
+// Additional function to detect binary files using content heuristics
+function detectBinaryContent(buffer, sampleSize = 512) {
+  // Check a small sample of the file for null bytes or non-UTF8 characters
+  // This is a simple heuristic and not foolproof, but catches many binary files
+  try {
+    if (!buffer || buffer.length === 0) return false;
+    
+    // Check up to sampleSize bytes (or the whole buffer if smaller)
+    const checkSize = Math.min(buffer.length, sampleSize);
+    
+    // Count null bytes and non-printable characters
+    let nullCount = 0;
+    let nonPrintableCount = 0;
+    
+    for (let i = 0; i < checkSize; i++) {
+      const byte = buffer[i];
+      if (byte === 0) nullCount++;
+      // Check for non-printable characters (control characters except tabs, newlines)
+      if ((byte < 9 || (byte > 10 && byte < 32)) && byte !== 13) {
+        nonPrintableCount++;
+      }
+    }
+    
+    // If more than 1% nulls or 10% non-printable, likely binary
+    return (nullCount / checkSize > 0.01) || (nonPrintableCount / checkSize > 0.1);
+  } catch (err) {
+    console.error("Error detecting binary content:", err);
+    return false; // On error, assume not binary
+  }
 }
 
 // Count tokens using tiktoken with o200k_base encoding
@@ -608,6 +744,15 @@ function countTokens(text) {
     // Fallback to character-based estimation on error
     return Math.ceil(text.length / 4);
   }
+}
+
+/**
+ * Checks if a directory should be completely skipped
+ * @param {string} dirName - The name of the directory to check
+ * @returns {boolean} - True if the directory should be skipped
+ */
+function shouldSkipDirectory(dirName) {
+  return SKIP_DIRS.includes(dirName);
 }
 
 /**
@@ -636,7 +781,47 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
 
   let results = [];
   let processedFiles = 0;
-  const CHUNK_SIZE = 20;
+  // Increase chunk size for better performance with large repos
+  const CHUNK_SIZE = 50;
+  // Limit directory depth to prevent excessive recursion
+  const MAX_DEPTH = 20;
+  // Tracking current depth
+  const depth = isRoot ? 0 : (dir.split(path.sep).length - rootDir.split(path.sep).length);
+  
+  // Early return if we're too deep and not doing a deep scan
+  if (depth > MAX_DEPTH && !isDeepScanEnabled) {
+    console.log(`Reached max depth (${MAX_DEPTH}) at ${dir}, stopping traversal`);
+    return [{
+      name: basename(dir),
+      path: normalizePath(dir),
+      relativePath: safeRelativePath(rootDir, dir),
+      content: "",
+      tokenCount: 0,
+      size: 0,
+      isBinary: false,
+      isSkipped: true,
+      isDirectory: true,
+      error: "Max directory depth reached"
+    }];
+  }
+
+  // Check if this is a directory we should skip entirely
+  const dirName = basename(dir);
+  if (!isRoot && shouldSkipDirectory(dirName)) {
+    console.log(`Skipping known problematic directory: ${dir}`);
+    return [{
+      name: dirName,
+      path: normalizePath(dir),
+      relativePath: safeRelativePath(rootDir, dir),
+      content: "",
+      tokenCount: 0,
+      size: 0,
+      isBinary: false,
+      isSkipped: true,
+      isDirectory: true,
+      error: "Directory skipped for performance"
+    }];
+  }
 
   // Add root folder if this is the top-level call
   if (isRoot) {
@@ -669,76 +854,128 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
 
     const directories = dirents.filter(dirent => dirent.isDirectory());
     const files = dirents.filter(dirent => dirent.isFile());
+    
+    // Update counter for found files and directories
+    totalFilesFound += files.length;
+    totalDirectoriesFound += directories.length;
 
-    // Process directories first
-    for (const dirent of directories) {
+    // Process directories first, but in chunks to avoid blocking UI
+    for (let i = 0; i < directories.length; i += CHUNK_SIZE) {
       if (!isLoadingDirectory) return results;
-
-      const fullPath = safePathJoin(dir, dirent.name);
-      // Calculate relative path safely
-      const relativePath = safeRelativePath(rootDir, fullPath);
-
-      // Skip PasteMax app directories and invalid paths
-      if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
-          !isValidPath(relativePath) || relativePath.startsWith('..')) {
-        console.log('Skipping directory:', fullPath);
-        continue;
-      }
-
-      // Add the directory itself to the results
-      try {
-        const dirStats = await fs.promises.stat(fullPath);
-        results.push({
-          name: dirent.name,
-          path: normalizePath(fullPath),
-          relativePath: relativePath,
-          tokenCount: 0,
-          size: dirStats.size || 0,
-          content: "",
-          isBinary: false,
-          isSkipped: false,
-          isDirectory: true,
-          error: null
-        });
-      } catch (dirErr) {
-        console.error(`Error adding directory ${fullPath}:`, dirErr);
-        // Still add the directory entry with default values if we can't stat it
-        results.push({
-          name: dirent.name,
-          path: normalizePath(fullPath),
-          relativePath: relativePath,
-          tokenCount: 0,
-          size: 0,
-          content: "",
-          isBinary: false,
-          isSkipped: false,
-          isDirectory: true,
-          error: `Error reading directory: ${dirErr.message}`
-        });
-      }
-
-      // Only process if not ignored
-      try {
-        // Safely check if directory should be ignored
-        if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
-            relativePath && relativePath.trim() !== '' && 
-            !ignoreFilter.ignores(relativePath)) {
-          const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false);
-          if (!isLoadingDirectory) return results;
-          if (Array.isArray(subResults)) {
-            results = results.concat(subResults);
-          } else {
-            console.warn(`Non-array result from recursive call for ${fullPath}:`, subResults);
-          }
+      
+      const directoryChunk = directories.slice(i, i + CHUNK_SIZE);
+      
+      // Use Promise.all to process directory chunk in parallel
+      const dirResults = await Promise.all(directoryChunk.map(async (dirent) => {
+        if (!isLoadingDirectory) return null;
+        
+        // Quick check if this is a directory we want to completely skip
+        if (shouldSkipDirectory(dirent.name)) {
+          console.log(`Quickly skipping known directory: ${dirent.name}`);
+          totalDirectoriesProcessed++;
+          return [{
+            name: dirent.name,
+            path: normalizePath(safePathJoin(dir, dirent.name)),
+            relativePath: safeRelativePath(rootDir, safePathJoin(dir, dirent.name)),
+            content: "",
+            tokenCount: 0,
+            size: 0,
+            isBinary: false,
+            isSkipped: true,
+            isDirectory: true,
+            error: "Directory skipped for performance"
+          }];
         }
-      } catch (subDirErr) {
-        console.error(`Error processing subdirectory ${fullPath}:`, subDirErr);
-      }
-
+        
+        const fullPath = safePathJoin(dir, dirent.name);
+        // Calculate relative path safely
+        const relativePath = safeRelativePath(rootDir, fullPath);
+        
+        // Skip PasteMax app directories and invalid paths
+        if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
+            !isValidPath(relativePath) || relativePath.startsWith('..')) {
+          console.log('Skipping directory:', fullPath);
+          return null;
+        }
+        
+        let directoryResults = [];
+        
+        // Add the directory itself to the results
+        try {
+          const dirStats = await fs.promises.stat(fullPath);
+          directoryResults.push({
+            name: dirent.name,
+            path: normalizePath(fullPath),
+            relativePath: relativePath,
+            tokenCount: 0,
+            size: dirStats.size || 0,
+            content: "",
+            isBinary: false,
+            isSkipped: false,
+            isDirectory: true,
+            error: null
+          });
+        } catch (dirErr) {
+          console.error(`Error adding directory ${fullPath}:`, dirErr);
+          // Still add the directory entry with default values if we can't stat it
+          directoryResults.push({
+            name: dirent.name,
+            path: normalizePath(fullPath),
+            relativePath: relativePath,
+            tokenCount: 0,
+            size: 0,
+            content: "",
+            isBinary: false,
+            isSkipped: false,
+            isDirectory: true,
+            error: `Error reading directory: ${dirErr.message}`
+          });
+        }
+        
+        // Only process if not ignored
+        try {
+          // Safely check if directory should be ignored
+          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
+              relativePath && relativePath.trim() !== '' && 
+              !ignoreFilter.ignores(relativePath)) {
+            // Skip certain directories that tend to be problematic
+            if ((depth >= 5 && !isDeepScanEnabled)) {
+              // For these, just add the directory but don't process contents
+              console.log(`Skipping deep traversal of ${relativePath} at depth ${depth}`);
+            } else {
+              const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false);
+              if (!isLoadingDirectory) return null;
+              
+              if (Array.isArray(subResults)) {
+                directoryResults = directoryResults.concat(subResults);
+              } else {
+                console.warn(`Non-array result from recursive call for ${fullPath}:`, subResults);
+              }
+            }
+          } else {
+            console.log(`Skipping ignored directory: ${relativePath}`);
+          }
+        } catch (subDirErr) {
+          console.error(`Error processing subdirectory ${fullPath}:`, subDirErr);
+        }
+        
+        totalDirectoriesProcessed++;
+        return directoryResults;
+      }));
+      
+      // Flatten and add directory results
+      results = results.concat(dirResults.filter(Boolean).flat());
+      
+      // Update UI with progress after each chunk
       window.webContents.send("file-processing-status", {
         status: "processing",
-        message: `Scanning directories... (Press ESC to cancel)`,
+        message: `Scanning directories... ${totalDirectoriesProcessed}/${totalDirectoriesFound} (Press ESC to cancel)`,
       });
+      
+      // Add a small delay between directory chunks to keep UI responsive
+      if (i + CHUNK_SIZE < directories.length) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
     }
 
     // Process files in chunks
@@ -761,12 +998,6 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           return null;
         }
 
-        // Early check for binary files
-        if (isBinaryFile(fullPath)) {
-          console.log(`Skipping binary file: ${relativePath}`);
-          return null; // Skip binary files completely - don't even add them to results
-        }
-
         // Safely check if file should be ignored
         try {
           if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
@@ -783,7 +1014,11 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           const stats = await fs.promises.stat(fullPath);
           if (!isLoadingDirectory) return null;
           
+          // Check if file is binary based on extension
+          const isBin = isBinaryFile(fullPath);
+          
           if (stats.size > MAX_FILE_SIZE) {
+            totalFilesProcessed++;
             return {
               name: dirent.name,
               path: normalizePath(fullPath),
@@ -791,14 +1026,16 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
               tokenCount: 0,
               size: stats.size,
               content: "",
-              isBinary: false,
+              isBinary: isBin, // Mark as binary if detected by extension
               isSkipped: true,
               isDirectory: false,
               error: "File too large to process"
             };
           }
 
-          if (isBinaryFile(fullPath)) {
+          // Always tag binary files but include them in results
+          if (isBin) {
+            totalFilesProcessed++;
             return {
               name: dirent.name,
               path: normalizePath(fullPath),
@@ -813,22 +1050,79 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
             };
           }
 
-          const fileContent = await fs.promises.readFile(fullPath, "utf8");
-          if (!isLoadingDirectory) return null;
-          
-          return {
-            name: dirent.name,
-            path: normalizePath(fullPath),
-            relativePath: relativePath,
-            content: fileContent,
-            tokenCount: countTokens(fileContent),
-            size: stats.size,
-            isBinary: false,
-            isSkipped: false,
-            isDirectory: false
-          };
+          // For non-binary files, read and process content
+          try {
+            const fileContent = await fs.promises.readFile(fullPath, "utf8");
+            if (!isLoadingDirectory) return null;
+            
+            totalFilesProcessed++;
+            return {
+              name: dirent.name,
+              path: normalizePath(fullPath),
+              relativePath: relativePath,
+              content: fileContent,
+              tokenCount: countTokens(fileContent),
+              size: stats.size,
+              isBinary: false,
+              isSkipped: false,
+              isDirectory: false
+            };
+          } catch (readErr) {
+            // If we couldn't read as UTF-8, try to detect if it's binary
+            try {
+              // Read a small sample of the file as a buffer to check
+              const buffer = await fs.promises.readFile(fullPath, { encoding: null, flag: 'r', length: 512 });
+              const isBinaryContent = detectBinaryContent(buffer);
+              
+              totalFilesProcessed++;
+              if (isBinaryContent) {
+                return {
+                  name: dirent.name,
+                  path: normalizePath(fullPath),
+                  relativePath: relativePath,
+                  tokenCount: 0,
+                  size: stats.size,
+                  content: "",
+                  isBinary: true,
+                  isSkipped: false,
+                  isDirectory: false,
+                  fileType: path.extname(fullPath).substring(1).toUpperCase() || "BIN"
+                };
+              } else {
+                // Not binary but still couldn't read as UTF-8
+                return {
+                  name: dirent.name,
+                  path: normalizePath(fullPath),
+                  relativePath: relativePath,
+                  tokenCount: 0,
+                  size: stats.size,
+                  content: "",
+                  isBinary: false,
+                  isSkipped: true,
+                  isDirectory: false,
+                  error: "File encoding not supported"
+                };
+              }
+            } catch (bufferErr) {
+              console.error(`Error reading file buffer ${fullPath}:`, bufferErr);
+              totalFilesProcessed++;
+              return {
+                name: dirent.name,
+                path: normalizePath(fullPath),
+                relativePath: relativePath,
+                tokenCount: 0,
+                size: stats.size,
+                content: "",
+                isBinary: false,
+                isSkipped: true,
+                isDirectory: false,
+                error: "Failed to read file: " + bufferErr.message
+              };
+            }
+          }
         } catch (err) {
           console.error(`Error reading file ${fullPath}:`, err);
+          totalFilesProcessed++;
           return {
             name: dirent.name,
             path: normalizePath(fullPath),
@@ -853,8 +1147,13 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
       
       window.webContents.send("file-processing-status", {
         status: "processing",
-        message: `Processing files... ${processedFiles}/${files.length} (Press ESC to cancel)`,
+        message: `Processing files... ${totalFilesProcessed}/${totalFilesFound} (Press ESC to cancel)`,
       });
+      
+      // Add a small delay between file chunks to keep UI responsive
+      if (i + CHUNK_SIZE < files.length) {
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
     }
   } catch (err) {
     console.error(`Error reading directory ${dir}:`, err);
@@ -886,6 +1185,9 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     console.log("OS platform:", os.platform());
     console.log("Path separator:", getPathSeparator());
 
+    // Reset progress counters
+    resetProgressCounters();
+    
     // Set the loading flag to true
     isLoadingDirectory = true;
     
@@ -906,8 +1208,11 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
       try {
         console.log("Starting directory scan, isLoadingDirectory =", isLoadingDirectory);
         
+        // Initialize the gitignore filter once to avoid re-reading it for each directory
+        const ignoreFilter = loadGitignore(folderPath);
+        
         // Await the result of readFilesRecursively
-        const files = await readFilesRecursively(folderPath, folderPath, null, window, true);
+        const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true);
         console.log(`Found ${files ? files.length : 0} files in ${folderPath}`);
 
         if (!files || !Array.isArray(files)) {
@@ -922,7 +1227,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         // Update with processing complete status
         event.sender.send("file-processing-status", {
           status: "complete",
-          message: `Found ${files.length} files`,
+          message: `Found ${files.length} files (processed ${totalFilesProcessed} files in ${totalDirectoriesProcessed} directories)`,
         });
 
         // Process the files to ensure they're serializable
@@ -1052,8 +1357,45 @@ function shouldExcludeByDefault(filePath, rootDir) {
       return false; // Don't exclude the root directory itself
     }
     
-    // Debug log
-    console.log(`Checking if ${relativePathNormalized} should be excluded`);
+    // First check if it's a binary file by extension
+    if (isBinaryFile(filePath)) {
+      // Binary files should be shown but tagged as binary, not excluded completely
+      return false;
+    }
+    
+    // Check for common large/generated files that should be excluded
+    const excludedPatterns = [
+      // Node modules
+      /node_modules\//i,
+      // Package lock files
+      /package-lock\.json$/i,
+      /yarn\.lock$/i,
+      // Build output
+      /dist\//i,
+      /build\//i,
+      // Minified files
+      /\.min\.(js|css)$/i,
+      // Map files
+      /\.map$/i,
+      // Version control
+      /\.git\//i,
+      // Log files
+      /\.log$/i,
+    ];
+    
+    // Check against common patterns first for performance
+    for (const pattern of excludedPatterns) {
+      if (pattern.test(relativePathNormalized)) {
+        return true;
+      }
+    }
+    
+    // Debug log - only for certain paths to avoid spam
+    if (relativePathNormalized.includes('node_modules') || 
+        relativePathNormalized.includes('.git/') ||
+        relativePathNormalized.endsWith('.min.js')) {
+      console.log(`Checking if ${relativePathNormalized} should be excluded`);
+    }
     
     // Load gitignore patterns for this root dir
     const gitignoreFilter = loadGitignore(rootDir);
@@ -1062,7 +1404,11 @@ function shouldExcludeByDefault(filePath, rootDir) {
     if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function') {
       try {
         if (gitignoreFilter.ignores(relativePathNormalized)) {
-          console.log(`File excluded by gitignore: ${relativePathNormalized}`);
+          if (relativePathNormalized.includes('node_modules') || 
+              relativePathNormalized.includes('.git/') ||
+              relativePathNormalized.endsWith('.min.js')) {
+            console.log(`File excluded by gitignore: ${relativePathNormalized}`);
+          }
           return true;
         }
       } catch (ignoreErr) {
@@ -1073,7 +1419,16 @@ function shouldExcludeByDefault(filePath, rootDir) {
     // Use the ignore package to do glob pattern matching for default excluded files
     try {
       const ig = ignore().add(excludedFiles);
-      return ig.ignores(relativePathNormalized);
+      const shouldExclude = ig.ignores(relativePathNormalized);
+      
+      if (shouldExclude && (
+          relativePathNormalized.includes('node_modules') || 
+          relativePathNormalized.includes('.git/') ||
+          relativePathNormalized.endsWith('.min.js'))) {
+        console.log(`File excluded by patterns: ${relativePathNormalized}`);
+      }
+      
+      return shouldExclude;
     } catch (ignoreError) {
       console.error("Error in ignore.ignores():", ignoreError);
       return false; // On ignore error, don't exclude the file
@@ -1223,4 +1578,12 @@ function syncDevToolsTheme(theme) {
   } catch (err) {
     console.error('Failed to sync DevTools theme:', err);
   }
+}
+
+// Reset the progress counters when starting a new directory scan
+function resetProgressCounters() {
+  totalFilesProcessed = 0;
+  totalFilesFound = 0;
+  totalDirectoriesProcessed = 0;
+  totalDirectoriesFound = 0;
 }
