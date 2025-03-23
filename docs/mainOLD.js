@@ -3,7 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto"); // Added for CSP nonce generation
-const { isBinaryFileSync } = require("isbinaryfile");
 
 // Import shared path utilities
 const { 
@@ -24,55 +23,16 @@ const {
   isSubPath,
 } = require("./shared/path-utils");
 
-// Log rootFilesToExclude to verify it's imported correctly
-console.log("Imported rootFilesToExclude:", require('./excluded-files').rootFilesToExclude);
-
 // Global variables for directory loading control
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
 let isHandlingGitignore = false; // New flag to track gitignore processing specifically
 const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
 
-/**
- * Helper function to send status updates to the UI
- * @param {Electron.WebContents|Electron.IpcMainEvent} sender - Event or WebContents to send status updates to
- * @param {string} message - The status message to send
- * @param {string} status - The status type ('processing', 'complete', 'error', 'cancelled')
- * @param {boolean} [force=false] - Whether to force sending even if not in loading/gitignore state
- */
-function sendStatusUpdate(sender, message, status = 'processing', force = false) {
-  try {
-    if (!sender) return;
-    
-    // Only send updates if we're in the initial loading phase, explicitly handling gitignore files, or forced
-    const shouldSendUpdates = force || isLoadingDirectory || isHandlingGitignore;
-    if (!shouldSendUpdates) return;
-    
-    const statusUpdate = {
-      status: status,
-      message: message
-    };
-    
-    // Handle both WebContents and IpcMainEvent objects
-    if (sender.send) {
-      sender.send("file-processing-status", statusUpdate);
-    } else if (sender.webContents && sender.webContents.send) {
-      sender.webContents.send("file-processing-status", statusUpdate);
-    }
-  } catch (err) {
-    console.error("Error sending status update:", err);
-  }
-}
-
 // Add a cache for gitignore file paths to avoid rescanning
 const gitignoreCache = new Map();
 // Maximum age in milliseconds before invalidating the cache (10 minutes)
 const GITIGNORE_CACHE_MAX_AGE = 10 * 60 * 1000;
-
-// Add a cache for exclusion check results to avoid redundant processing
-const exclusionCache = new Map();
-// Maximum age in milliseconds before invalidating the exclusion cache (5 minutes)
-const EXCLUSION_CACHE_MAX_AGE = 10 * 60 * 1000;
 
 // Store reference to mainWindow globally so we can access it for theme updates
 let mainWindow = null;
@@ -92,8 +52,7 @@ const {
   binaryExtensions, 
   skipDirectories,
   defaultIgnorePatterns,
-  excludedRegexPatterns,
-  rootFilesToExclude
+  excludedRegexPatterns
 } = require("./excluded-files");
 
 // List of directories that should be completely skipped during traversal
@@ -142,6 +101,63 @@ try {
   console.log("Using fallback token counter");
   encoder = null;
 }
+
+// Binary file extensions that should be excluded from token counting
+// Use the centralized list from excluded-files.js and add any built-in defaults
+const BINARY_EXTENSIONS = [
+  // Images
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".bmp",
+  ".tiff",
+  ".ico",
+  ".icns",
+  ".webp",
+  ".svg",
+  ".heic",
+  ".heif",
+  ".pdf",
+  ".psd",
+  // Audio/Video
+  ".mp3",
+  ".mp4",
+  ".wav",
+  ".ogg",
+  ".avi",
+  ".mov",
+  ".mkv",
+  ".flac",
+  // Archives
+  ".zip",
+  ".rar",
+  ".tar",
+  ".gz",
+  ".7z",
+  // Documents
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
+  // Compiled
+  ".exe",
+  ".dll",
+  ".so",
+  ".class",
+  ".o",
+  ".pyc",
+  // Database
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  // Others
+  ".bin",
+  ".dat",
+].concat(binaryExtensions || []); // Add extensions from excluded-files.js
 
 // Max file size to read (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -337,9 +353,6 @@ app.whenReady().then(() => {
   // Set secure app-wide defaults for production
   const isDev = process.env.NODE_ENV === "development";
   
-  // Set up cache cleanup to prevent memory leaks
-  setupCacheCleanup();
-  
   if (!isDev) {
     // Production security settings
     
@@ -396,8 +409,7 @@ ipcMain.on("open-folder", async (event) => {
     try {
       // Clear the gitignore cache since we're loading a new project
       gitignoreCache.clear();
-      exclusionCache.clear(); // Also clear the exclusion cache
-      console.log("Cleared gitignore and exclusion caches for new project");
+      console.log("Cleared gitignore cache for new project");
       
       // Ensure we're only sending a string, not an object
       const pathString = String(selectedPath);
@@ -423,10 +435,36 @@ ipcMain.on("open-folder", async (event) => {
 async function loadGitignore(rootDir, sender) {
   console.log(`Loading gitignore patterns for ${rootDir}`);
   
+  // Only send status updates if we're still in the initial loading phase or explicitly handling gitignore files
+  const shouldSendUpdates = isLoadingDirectory || isHandlingGitignore;
+  
   // Set the gitignore handling flag
   isHandlingGitignore = true;
   
-  sendStatusUpdate(sender, "Finding and parsing .gitignore files...");
+  // Send processing status update if we have a sender and should send updates
+  const sendStatusUpdate = (message) => {
+    try {
+      if (sender && shouldSendUpdates) {
+        const statusUpdate = {
+          status: "processing",
+          message: message
+        };
+        
+        // Handle both WebContents and IpcMainEvent objects
+        if (sender.send) {
+          sender.send("file-processing-status", statusUpdate);
+        } else if (sender.webContents && sender.webContents.send) {
+          sender.webContents.send("file-processing-status", statusUpdate);
+        }
+      }
+    } catch (err) {
+      console.error("Error sending gitignore status update:", err);
+    }
+  };
+  
+  if (shouldSendUpdates) {
+    sendStatusUpdate("Finding and parsing .gitignore files...");
+  }
   
   // Create a default ignore filter
   let ig;
@@ -450,44 +488,30 @@ async function loadGitignore(rootDir, sender) {
     // Ensure root directory path is absolute and normalized
     rootDir = ensureAbsolutePath(rootDir);
     
-    // Step 1: Start with default exclusion patterns from excluded-files.js
-    // These are the base patterns that apply to all projects
-    const defaultPatterns = [...defaultIgnorePatterns];
-    console.log(`Using ${defaultPatterns.length} default exclusion patterns`);
-    
-    // Step 2: Find all .gitignore files in the project
-    if (sender) {
-      sendStatusUpdate(sender, "Scanning for .gitignore files...");
+    // Step 1: Find all .gitignore files in the project
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Scanning for .gitignore files...");
     }
-    const gitignoreFiles = await findAllGitignoreFiles(rootDir, 10, sender);
+    const gitignoreFiles = await findAllGitignoreFiles(rootDir, 10, shouldSendUpdates ? sender : null);
     
-    // Step 3: Consolidate patterns from all gitignore files
-    let gitignorePatterns = [];
+    // Step 2: Consolidate patterns from all gitignore files
+    let consolidatedPatterns = [];
     if (gitignoreFiles.length > 0) {
-      if (sender) {
-        sendStatusUpdate(sender, `Processing ${gitignoreFiles.length} .gitignore files...`);
+      if (shouldSendUpdates) {
+        sendStatusUpdate(`Processing ${gitignoreFiles.length} .gitignore files...`);
       }
-      gitignorePatterns = await consolidateIgnorePatterns(gitignoreFiles, rootDir);
-      console.log(`Consolidated ${gitignorePatterns.length} patterns from .gitignore files`);
+      consolidatedPatterns = await consolidateIgnorePatterns(gitignoreFiles, rootDir);
     } else {
       console.log(`No .gitignore files found in ${rootDir}, using only default ignores`);
     }
     
-    // Step 4: Merge with default patterns (giving priority to .gitignore patterns)
-    if (sender) {
-      sendStatusUpdate(sender, "Finalizing file exclusion patterns...");
+    // Step 3: Merge with default ignores and excluded files
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Finalizing file exclusion patterns...");
     }
+    const finalPatterns = mergeWithDefaultIgnores(consolidatedPatterns);
     
-    // Use a Set to remove exact duplicates
-    const uniquePatterns = new Set([
-      ...defaultPatterns,        // Default patterns first
-      ...gitignorePatterns       // Then .gitignore patterns, which will override defaults
-    ]);
-    
-    const finalPatterns = [...uniquePatterns];
-    console.log(`Final exclusion patterns: ${finalPatterns.length} unique patterns`);
-    
-    // Step 5: Add all patterns to the ignore filter
+    // Step 4: Add all patterns to the ignore filter
     ig.add(finalPatterns);
     
     console.log(`Ignore filter configured with ${finalPatterns.length} patterns`);
@@ -512,27 +536,10 @@ async function loadGitignore(rootDir, sender) {
   }
 }
 
-// Check if file is binary based on extension or content
+// Check if file is binary based on extension
 function isBinaryFile(filePath) {
-  try {
-    // First check by extension for better performance
-    const ext = path.extname(filePath).toLowerCase();
-    if (binaryExtensions.includes(ext)) {
-      return true;
-    }
-    
-    // Use the imported binary file detection as a backup when needed
-    // Only perform content-based detection for non-excluded extensions
-    // This improves performance by avoiding unnecessary file reads
-    if (fs.existsSync(filePath) && fs.statSync(filePath).size < MAX_FILE_SIZE) {
-      return isBinaryFileSync(filePath);
-    }
-    
-    return false;
-  } catch (err) {
-    console.error(`Error in isBinaryFile check for ${filePath}:`, err);
-    return false;
-  }
+  const ext = path.extname(filePath).toLowerCase();
+  return BINARY_EXTENSIONS.includes(ext);
 }
 
 // Additional function to detect binary files using content heuristics
@@ -735,33 +742,24 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         // Calculate relative path safely
         const relativePath = safeRelativePath(rootDir, fullPath);
         
-        // Skip PasteMax app files and invalid paths
-        if (isAppPath(fullPath, relativePath)) {
+        // Skip PasteMax app directories and invalid paths
+        if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
+            !isValidPath(relativePath) || relativePath.startsWith('..')) {
           console.log('Skipping directory:', fullPath);
           return null;
         }
         
-        // FIRST CHECK: Check if directory should be excluded by .gitignore or default patterns
+        // Check if directory should be ignored first - prioritize ignores over anything else
         try {
-          // Check if directory should be excluded by default patterns
-          const normalizedPath = normalizePath(fullPath);
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
-          
-          // Check if directory should be excluded by gitignore filter
-          const isIgnored = ignoreFilter && 
-                           typeof ignoreFilter.ignores === 'function' && 
-                           relativePath && 
-                           relativePath.trim() !== '' && 
-                           ignoreFilter.ignores(relativePath);
-          
-          // Skip the directory if it should be excluded by either pattern
-          if (shouldExclude || isIgnored) {
-            console.log(`Skipping excluded directory: ${relativePath}`);
+          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
+              relativePath && relativePath.trim() !== '' && 
+              ignoreFilter.ignores(relativePath)) {
+            console.log(`Skipping ignored directory: ${relativePath}`);
             totalDirectoriesProcessed++;
-            return null;
+            return null; // Skip ignored directories completely without any further processing
           }
         } catch (ignoreErr) {
-          console.error(`Error checking exclusion patterns for directory ${fullPath}:`, ignoreErr);
+          console.error(`Error in ignore filter for directory ${fullPath}:`, ignoreErr);
         }
         
         let directoryResults = [];
@@ -826,7 +824,10 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
       results = results.concat(dirResults.filter(Boolean).flat());
       
       // Update UI with progress after each chunk
-      sendStatusUpdate(window.webContents, `Scanning directories... ${totalDirectoriesProcessed}/${totalDirectoriesFound} (Press ESC to cancel)`);
+      window.webContents.send("file-processing-status", {
+        status: "processing",
+        message: `Scanning directories... ${totalDirectoriesProcessed}/${totalDirectoriesFound} (Press ESC to cancel)`,
+      });
       
       // Add a small delay between directory chunks to keep UI responsive
       if (i + CHUNK_SIZE < directories.length) {
@@ -848,38 +849,25 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         const relativePath = safeRelativePath(rootDir, fullPath);
 
         // Skip PasteMax app files and invalid paths
-        if (isAppPath(fullPath, relativePath)) {
+        if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
+            !isValidPath(relativePath) || relativePath.startsWith('..')) {
           console.log('Skipping file:', fullPath);
           return null;
         }
-        
-        // FIRST CHECK: Check if the file should be excluded by default patterns or gitignore
-        const normalizedPath = normalizePath(fullPath);
+
+        // Safely check if file should be ignored - do this check first before any file processing
         try {
-          // Check if file should be excluded by default patterns
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
-          
-          // Check if file should be excluded by gitignore filter
-          const isIgnored = ignoreFilter && 
-                           typeof ignoreFilter.ignores === 'function' && 
-                           relativePath && 
-                           relativePath.trim() !== '' && 
-                           ignoreFilter.ignores(relativePath);
-          
-          // Skip the file if it should be excluded by either pattern
-          if (shouldExclude || isIgnored) {
-            console.log(`Skipping excluded file: ${relativePath}`);
+          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
+              relativePath && relativePath.trim() !== '' && 
+              ignoreFilter.ignores(relativePath)) {
+            console.log(`Skipping ignored file: ${relativePath}`);
             totalFilesProcessed++;
-            return null;
+            return null; // Skip ignored files completely without any further processing
           }
-          
-          // File passed both default and gitignore exclusion checks
-          console.log(`File passed exclusion checks: ${relativePath}`);
         } catch (ignoreErr) {
-          console.error(`Error checking exclusion patterns for ${fullPath}:`, ignoreErr);
+          console.error(`Error in ignore filter for ${fullPath}:`, ignoreErr);
         }
 
-        // SECOND CHECK: Only after the file passes exclusion checks, we check if it's binary
         try {
           const stats = await fs.promises.stat(fullPath);
           if (!isLoadingDirectory) return null;
@@ -1015,7 +1003,10 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
       results = results.concat(chunkResults.filter(result => result !== null));
       processedFiles += chunk.length;
       
-      sendStatusUpdate(window.webContents, `Processing files... ${totalFilesProcessed}/${totalFilesFound} (Press ESC to cancel)`);
+      window.webContents.send("file-processing-status", {
+        status: "processing",
+        message: `Processing files... ${totalFilesProcessed}/${totalFilesFound} (Press ESC to cancel)`,
+      });
       
       // Add a small delay between file chunks to keep UI responsive
       if (i + CHUNK_SIZE < files.length) {
@@ -1054,7 +1045,10 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     setupDirectoryLoadingTimeout(window, folderPath);
 
     // Send initial progress update
-    sendStatusUpdate(event.sender, "Scanning directory structure...");
+    event.sender.send("file-processing-status", {
+      status: "processing",
+      message: "Scanning directory structure...",
+    });
 
     // Process files in a way that can be properly awaited
     const processFiles = async () => {
@@ -1079,7 +1073,10 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         console.log("      Priority: 1. Directory ignores, 2. File ignores, 3. Binary detection");
         
         // Update status now that gitignore is done
-        sendStatusUpdate(event.sender, "Reading files...");
+        event.sender.send("file-processing-status", {
+          status: "processing",
+          message: "Reading files...",
+        });
         
         // Await the result of readFilesRecursively
         const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true);
@@ -1087,22 +1084,27 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
 
         if (!files || !Array.isArray(files)) {
           console.error("Error: readFilesRecursively did not return an array");
-          sendStatusUpdate(event.sender, "Error: Failed to process directory structure", "error");
+          event.sender.send("file-processing-status", {
+            status: "error",
+            message: "Error: Failed to process directory structure",
+          });
           return;
         }
 
         // Update with processing near-complete status 
-        sendStatusUpdate(event.sender, `Finalizing ${files.length} files...`);
+        event.sender.send("file-processing-status", {
+          status: "processing",
+          message: `Finalizing ${files.length} files...`,
+        });
 
         // Process the files to ensure they're serializable
         const serializableFiles = await Promise.all(files.map(async (file) => {
           // Normalize the path to use forward slashes consistently
           const normalizedPath = normalizePath(file.path);
           
-          // First, check if we should exclude this file by default (exclusion checks)
+          // Check if we should exclude this file by default
           const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
           
-          // Then deal with binary detection and other properties
           // Create a clean file object
           return {
             name: file.name ? String(file.name) : "",
@@ -1118,7 +1120,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             isSkipped: Boolean(file.isSkipped),
             error: file.error ? String(file.error) : null,
             fileType: file.fileType ? String(file.fileType) : null,
-            excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault 
+            excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault
             isDirectory: Boolean(file.isDirectory)
           };
         }));
@@ -1144,11 +1146,10 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
           }
           
           // First, send a final processing status update
-          sendStatusUpdate(
-            event.sender, 
-            `Found ${serializableFiles.length} files (processed ${totalFilesProcessed} files in ${totalDirectoriesProcessed} directories)`,
-            "complete"
-          );
+          event.sender.send("file-processing-status", {
+            status: "complete",
+            message: `Found ${serializableFiles.length} files (processed ${totalFilesProcessed} files in ${totalDirectoriesProcessed} directories)`,
+          });
           
           // Then send the actual file data
           event.sender.send("file-list-data", serializableFiles);
@@ -1171,11 +1172,10 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         }
       } catch (error) {
         console.error("Error in file processing:", error);
-        sendStatusUpdate(
-          event.sender,
-          `Error: ${error.message || "Unknown error during file processing"}`,
-          "error"
-        );
+        event.sender.send("file-processing-status", {
+          status: "error",
+          message: `Error: ${error.message || "Unknown error during file processing"}`,
+        });
       } finally {
         // Clear the loading flag when done
         isLoadingDirectory = false;
@@ -1193,24 +1193,15 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
     console.error("Error processing file list:", err);
     isLoadingDirectory = false;
     isHandlingGitignore = false;
-    sendStatusUpdate(
-      event.sender,
-      `Error: ${err.message}`,
-      "error"
-    );
+    event.sender.send("file-processing-status", {
+      status: "error",
+      message: `Error: ${err.message}`,
+    });
   }
 });
 
 /**
- * Checks if a file should be excluded by default, using glob matching and .gitignore patterns
- * This function implements the primary exclusion logic for determining which files to show.
- * 
- * Order of operations:
- * 1. Special handling for root directory and root files
- * 2. Check against common regex patterns for excluded files (fast path)
- * 3. Check against .gitignore patterns
- * 4. Check against default excluded file patterns
- * 
+ * Checks if a file should be excluded by default, using glob matching
  * @param {string} filePath - The file path to check
  * @param {string} rootDir - The root directory
  * @returns {Promise<boolean>} - Whether the file should be excluded
@@ -1227,20 +1218,6 @@ async function shouldExcludeByDefault(filePath, rootDir) {
     filePath = normalizePath(filePath);
     rootDir = normalizePath(rootDir);
 
-    // Cache key combines both paths
-    const cacheKey = `${rootDir}:${filePath}`;
-    
-    // Check cache first
-    if (exclusionCache.has(cacheKey)) {
-      const { result, timestamp } = exclusionCache.get(cacheKey);
-      if (Date.now() - timestamp < EXCLUSION_CACHE_MAX_AGE) {
-        return result;
-      }
-      // Cache expired, remove it
-      exclusionCache.delete(cacheKey);
-    }
-    
-    // Start the actual exclusion check logic
     // Handle Windows drive letter case sensitivity
     if (process.platform === 'win32') {
       filePath = filePath.toLowerCase();
@@ -1254,8 +1231,6 @@ async function shouldExcludeByDefault(filePath, rootDir) {
       
       if (fileDrive !== rootDrive) {
         console.log(`File on different drive: ${filePath} vs ${rootDir}`);
-        // Store result in cache
-        exclusionCache.set(cacheKey, { result: false, timestamp: Date.now() });
         return false; // Different drives, can't be excluded by relative patterns
       }
     }
@@ -1269,59 +1244,37 @@ async function shouldExcludeByDefault(filePath, rootDir) {
     // Handle empty relative paths (root directory case)
     if (!relativePathNormalized || relativePathNormalized === '') {
       console.log("Root directory or empty path detected in shouldExcludeByDefault");
-      // Store result in cache
-      exclusionCache.set(cacheKey, { result: false, timestamp: Date.now() });
       return false; // Don't exclude the root directory itself
     }
     
-    // Special handling for files directly in root (no path separators)
-    if (!relativePathNormalized.includes('/') && !relativePathNormalized.includes('\\')) {
-      // Debug log for root files
-      console.log(`Root file: ${relativePathNormalized}, checking against ROOT_FILES_TO_EXCLUDE`);
-      console.log(`ROOT_FILES_TO_EXCLUDE contains ${rootFilesToExclude.length} items: ${JSON.stringify(rootFilesToExclude)}`);
-      
-      // Check ONLY against the specific rootFilesToExclude list for root files
-      // This ensures root files are only excluded if explicitly listed
-      const shouldExcludeRootFile = rootFilesToExclude.includes(relativePathNormalized);
-      
-      if (shouldExcludeRootFile) {
-        console.log(`Root file ${relativePathNormalized} explicitly excluded by ROOT_FILES_TO_EXCLUDE list`);
-        exclusionCache.set(cacheKey, { result: true, timestamp: Date.now() });
-        return true;
-      }
-      
-      // If not in rootFilesToExclude, the root file should be included
-      console.log(`Root file ${relativePathNormalized} NOT in ROOT_FILES_TO_EXCLUDE list, including it`);
-      exclusionCache.set(cacheKey, { result: false, timestamp: Date.now() });
-      return false;
-    }
-    
-    // Check for common large/generated files that should be excluded using regex patterns
-    // These are quick checks that don't require loading full patterns
+    // Check for common large/generated files that should be excluded using regex patterns from excluded-files.js
+    // Use the patterns we imported at the top of the file
+    // Check against common patterns first for performance
     for (const pattern of excludedRegexPatterns) {
       if (pattern.test(relativePathNormalized)) {
-        // Store result in cache
-        exclusionCache.set(cacheKey, { result: true, timestamp: Date.now() });
         return true;
       }
     }
     
-    // For non-root files, use the preloaded gitignore filter
-    // Load gitignore patterns for this root directory
+    // Debug log - only for certain paths to avoid spam
+    if (relativePathNormalized.includes('node_modules') || 
+        relativePathNormalized.includes('.git/') ||
+        relativePathNormalized.endsWith('.min.js')) {
+      console.log(`Checking if ${relativePathNormalized} should be excluded`);
+    }
+    
+    // Load gitignore patterns for this root dir
     const gitignoreFilter = await loadGitignore(rootDir, null);
     
     // Check if the file is ignored by gitignore patterns
     if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function') {
       try {
-        // Use the combined filter (default patterns + gitignore patterns)
         if (gitignoreFilter.ignores(relativePathNormalized)) {
           if (relativePathNormalized.includes('node_modules') || 
               relativePathNormalized.includes('.git/') ||
               relativePathNormalized.endsWith('.min.js')) {
-            console.log(`File excluded by combined patterns: ${relativePathNormalized}`);
+            console.log(`File excluded by gitignore: ${relativePathNormalized}`);
           }
-          // Store result in cache
-          exclusionCache.set(cacheKey, { result: true, timestamp: Date.now() });
           return true;
         }
       } catch (ignoreErr) {
@@ -1329,10 +1282,23 @@ async function shouldExcludeByDefault(filePath, rootDir) {
       }
     }
     
-    // File passed all exclusion checks
-    // Store result in cache
-    exclusionCache.set(cacheKey, { result: false, timestamp: Date.now() });
-    return false;
+    // Use the ignore package to do glob pattern matching for default excluded files
+    try {
+      const ig = ignore().add(excludedFiles);
+      const shouldExclude = ig.ignores(relativePathNormalized);
+      
+      if (shouldExclude && (
+          relativePathNormalized.includes('node_modules') || 
+          relativePathNormalized.includes('.git/') ||
+          relativePathNormalized.endsWith('.min.js'))) {
+        console.log(`File excluded by patterns: ${relativePathNormalized}`);
+      }
+      
+      return shouldExclude;
+    } catch (ignoreError) {
+      console.error("Error in ignore.ignores():", ignoreError);
+      return false; // On ignore error, don't exclude the file
+    }
   } catch (error) {
     console.error("Error in shouldExcludeByDefault:", error);
     return false; // On any error, don't exclude the file
@@ -1365,7 +1331,10 @@ function cancelDirectoryLoading(window) {
   }
   
   // Send cancellation message immediately
-  sendStatusUpdate(window.webContents, "Directory loading cancelled", "cancelled", true);
+  window.webContents.send("file-processing-status", {
+    status: "cancelled",
+    message: "Directory loading cancelled",
+  });
 }
 
 /**
@@ -1527,12 +1496,38 @@ async function checkGitignoreFilesChanged(rootDir) {
 async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
   console.log(`Finding all .gitignore files in ${rootDir} (max depth: ${maxDepth})`);
   
+  // Only send updates if we're in initial loading or explicitly handling gitignore
+  const shouldSendUpdates = isLoadingDirectory || isHandlingGitignore;
+  
+  // Send processing status update if we have a sender and should send updates
+  const sendStatusUpdate = (message) => {
+    try {
+      if (sender && shouldSendUpdates) {
+        const statusUpdate = {
+          status: "processing",
+          message: message
+        };
+        
+        // Handle both WebContents and IpcMainEvent objects
+        if (sender.send) {
+          sender.send("file-processing-status", statusUpdate);
+        } else if (sender.webContents && sender.webContents.send) {
+          sender.webContents.send("file-processing-status", statusUpdate);
+        }
+      }
+    } catch (err) {
+      console.error("Error sending gitignore status update:", err);
+    }
+  };
+  
   // Check the cache first
   const cacheKey = rootDir;
   if (gitignoreCache.has(cacheKey)) {
     const { timestamp, files } = gitignoreCache.get(cacheKey);
     
-    sendStatusUpdate(sender, "Checking for changes in .gitignore files...");
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Checking for changes in .gitignore files...");
+    }
     
     // Check if files have been modified
     const filesChanged = await checkGitignoreFilesChanged(rootDir);
@@ -1544,17 +1539,23 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
     }
     if (filesChanged) {
       console.log(`Gitignore files changed, rescanning for ${rootDir}`);
-      sendStatusUpdate(sender, "Detected changes in .gitignore files, rescanning...");
+      if (shouldSendUpdates) {
+        sendStatusUpdate("Detected changes in .gitignore files, rescanning...");
+      }
     } else {
       console.log(`Cache expired for ${rootDir}, rescanning for gitignore files`);
-      sendStatusUpdate(sender, "Refreshing .gitignore cache...");
+      if (shouldSendUpdates) {
+        sendStatusUpdate("Refreshing .gitignore cache...");
+      }
     }
   }
 
   const gitignoreFiles = [];
   const dirsToSkip = new Set(SKIP_DIRS);
   
-  sendStatusUpdate(sender, "Scanning directories for .gitignore files...");
+  if (shouldSendUpdates) {
+    sendStatusUpdate("Scanning directories for .gitignore files...");
+  }
   
   // Helper function to recursively find gitignore files
   async function findGitignoreInDir(dir, currentDepth = 0) {
@@ -1574,7 +1575,9 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
       try {
         await fs.promises.access(gitignorePath, fs.constants.F_OK);
         gitignoreFiles.push(gitignorePath);
-        sendStatusUpdate(sender, `Found .gitignore in ${dirName}`);
+        if (shouldSendUpdates) {
+          sendStatusUpdate(`Found .gitignore in ${dirName}`);
+        }
       } catch (e) {
         // No .gitignore in this directory, continue
       }
@@ -1594,7 +1597,9 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
   }
   
   try {
-    sendStatusUpdate(sender, "Starting deep scan for .gitignore files...");
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Starting deep scan for .gitignore files...");
+    }
     await findGitignoreInDir(rootDir);
     
     // Update the cache with the newly found files
@@ -1607,7 +1612,9 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10, sender = null) {
     return gitignoreFiles;
   } catch (error) {
     console.error("Error finding gitignore files:", error);
-    sendStatusUpdate(sender, "Error finding .gitignore files", "error");
+    if (shouldSendUpdates) {
+      sendStatusUpdate("Error finding .gitignore files");
+    }
     return [];
   }
 }
@@ -1731,6 +1738,47 @@ async function consolidateIgnorePatterns(gitignoreFiles, rootDir) {
   return consolidatedPatterns;
 }
 
+/**
+ * Merge consolidated gitignore patterns with default exclusion patterns
+ * @param {Array<string>} consolidatedPatterns - Patterns from gitignore files
+ * @returns {Array<string>} - Final merged patterns with duplicates removed
+ */
+function mergeWithDefaultIgnores(consolidatedPatterns) {
+  // Get the default patterns from excluded-files.js
+  const defaultIgnores = defaultIgnorePatterns;
+  
+  // Get patterns from excluded-files.js
+  const excludedFilesPatterns = Array.isArray(excludedFiles) ? [...excludedFiles] : [];
+  
+  // Use a Set to remove exact duplicates
+  const uniquePatterns = new Set([
+    ...defaultIgnores,
+    ...excludedFilesPatterns,
+    ...consolidatedPatterns
+  ]);
+  
+  // Convert back to array and log some stats
+  const mergedPatterns = [...uniquePatterns];
+  
+  console.log(`Merged patterns - Total: ${mergedPatterns.length}`);
+  console.log(`- Default: ${defaultIgnores.length}`);
+  console.log(`- From excluded-files.js: ${excludedFilesPatterns.length}`);
+  console.log(`- From gitignore files: ${consolidatedPatterns.length}`);
+  console.log(`- Unique after merging: ${mergedPatterns.length}`);
+  
+  return mergedPatterns;
+}
+
+// Add isValidPath function for backward compatibility
+// This should be removed when we're confident everything uses the shared module
+function _isValidPath(pathToCheck) {
+  try {
+    return isValidPath(pathToCheck);
+  } catch (err) {
+    return false;
+  }
+}
+
 // Handle directory loading cancellation
 ipcMain.on("cancel-directory-loading", (event) => {
   console.log("Directory loading cancelled by user");
@@ -1746,61 +1794,8 @@ ipcMain.on("cancel-directory-loading", (event) => {
   }
   
   // Notify the renderer that the operation was cancelled
-  sendStatusUpdate(event.sender, "Operation cancelled by user", "cancelled", true);
+  event.sender.send("file-processing-status", {
+    status: "cancelled",
+    message: "Operation cancelled by user",
+  });
 });
-
-/**
- * Checks if a path should be skipped because it's part of the app itself
- * @param {string} path - The path to check
- * @param {string} [relativePath] - Optional relative path to also check
- * @returns {boolean} - True if the path should be skipped
- */
-function isAppPath(path, relativePath) {
-  // Check the main path
-  if (path.includes('.app') || path === app.getAppPath()) {
-    return true;
-  }
-  
-  // Check the relative path if provided
-  if (relativePath) {
-    return !isValidPath(relativePath) || relativePath.startsWith('..');
-  }
-  
-  return false;
-}
-
-// Add scheduled cache cleanup to prevent memory leaks
-function setupCacheCleanup() {
-  // Clean up stale cache entries every 15 minutes
-  const CLEANUP_INTERVAL = 15 * 60 * 1000; // 15 minutes
-  
-  // Set up periodic cleanup
-  setInterval(() => {
-    const now = Date.now();
-    
-    // Clean up exclusion cache
-    let expiredExclusionEntries = 0;
-    exclusionCache.forEach((entry, key) => {
-      if (now - entry.timestamp > EXCLUSION_CACHE_MAX_AGE) {
-        exclusionCache.delete(key);
-        expiredExclusionEntries++;
-      }
-    });
-    
-    // Clean up gitignore cache
-    let expiredGitignoreEntries = 0;
-    gitignoreCache.forEach((entry, key) => {
-      if (now - entry.timestamp > GITIGNORE_CACHE_MAX_AGE) {
-        gitignoreCache.delete(key);
-        expiredGitignoreEntries++;
-      }
-    });
-    
-    // Log results if any entries were cleaned up
-    if (expiredExclusionEntries > 0 || expiredGitignoreEntries > 0) {
-      console.log(`Cache cleanup: removed ${expiredExclusionEntries} exclusion entries and ${expiredGitignoreEntries} gitignore entries`);
-    }
-  }, CLEANUP_INTERVAL);
-  
-  console.log(`Scheduled cache cleanup every ${CLEANUP_INTERVAL / (60 * 1000)} minutes`);
-}

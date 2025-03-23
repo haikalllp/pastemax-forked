@@ -165,6 +165,24 @@ const CORE_PATTERNS = {
   ]
 };
 
+// Common root-level files that should be excluded by default
+const ROOT_FILES_TO_EXCLUDE = [
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml', 
+  '.gitignore',
+  '.npmrc',
+  '.prettierrc',
+  '.eslintrc',
+  '.eslintrc.js',
+  '.eslintrc.json',
+  '.prettierrc.js',
+  '.prettierrc.json',
+  'tsconfig.json',
+  '.babelrc',
+  '.editorconfig'
+];
+
 // Binary file extensions
 const BINARY_EXTENSIONS = [
   // Images
@@ -287,6 +305,9 @@ module.exports = {
   
   // Regex patterns for quick exclusion checks
   excludedRegexPatterns: EXCLUDED_REGEX_PATTERNS,
+
+  // Root files to exclude (files in project root that should be excluded)
+  rootFilesToExclude: ROOT_FILES_TO_EXCLUDE,
 
   // Export categories and patterns separately for potential selective usage
   ignoreCategories: CATEGORIES,
