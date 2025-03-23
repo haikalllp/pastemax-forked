@@ -38,6 +38,8 @@ export interface SidebarProps {
   selectedFolder: string | null;
   openFolder: () => void;
   addRootFolder: () => void;
+  removeRootFolder: (rootId: string) => void;
+  removeAllRootFolders: () => void;
   allFiles: FileData[];
   selectedFiles: string[];
   toggleFileSelection: (filePath: string) => void;
@@ -74,6 +76,7 @@ export interface TreeItemProps {
   toggleExpanded: (nodeId: string) => void;
   allFiles: FileData[];
   isRootNode?: boolean;
+  removeRootFolder?: (rootId: string) => void;
 }
 
 export interface SortOption {

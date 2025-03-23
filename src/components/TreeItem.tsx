@@ -4,7 +4,7 @@ import React, {
   memo
 } from "react";
 import { TreeItemProps, TreeNode, FileData } from "../types/FileTypes";
-import { ChevronRight, File, Folder, FolderOpen, X } from "lucide-react";
+import { ChevronRight, File, Folder, FolderOpen, X, Trash } from "lucide-react";
 import * as pathUtils from "../utils/pathUtils";
 
 // Ensure we have the critical path utilities, with fallbacks if needed
@@ -38,7 +38,8 @@ const TreeItem = ({
   toggleFolderSelection,
   toggleExpanded,
   allFiles,
-  isRootNode = false
+  isRootNode = false,
+  removeRootFolder
 }: TreeItemProps) => {
   const { id, name, path, type, level, isExpanded, fileData, rootId } = node;
   const checkboxRef = useRef(null);
@@ -99,6 +100,14 @@ const TreeItem = ({
 
   // Add additional class for top-level directories (level 0)
   const isTopLevelDirectory = type === "directory" && level === 0;
+  
+  // Handle remove root folder click
+  const handleRemoveClick = (e: any) => {
+    e.stopPropagation();
+    if (removeRootFolder && rootId) {
+      removeRootFolder(rootId);
+    }
+  };
   
   return (
     <div
@@ -175,6 +184,17 @@ const TreeItem = ({
         {/* Show badge for excluded files */}
         {!isDisabled && isExcludedByDefault && (
           <span className="tree-item-badge excluded">Excluded</span>
+        )}
+        
+        {/* Add remove button for root folders */}
+        {isTopLevelDirectory && removeRootFolder && rootId && (
+          <button 
+            className="tree-item-remove-btn"
+            onClick={handleRemoveClick}
+            title="Remove this root folder"
+          >
+            <Trash size={14} />
+          </button>
         )}
       </div>
     </div>

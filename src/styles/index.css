@@ -675,6 +675,41 @@ input[type="search"]:focus {
   text-overflow: ellipsis;
 }
 
+/* Button to remove a root folder */
+.tree-item-remove-btn {
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  margin-left: 8px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tree-item-remove-btn:hover {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: var(--error);
+  opacity: 1;
+}
+
+.sidebar-action-btn.remove-all {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(255, 0, 0, 0.1);
+  color: var(--error);
+  border-color: rgba(255, 0, 0, 0.2);
+}
+
+.sidebar-action-btn.remove-all:hover {
+  background-color: rgba(255, 0, 0, 0.15);
+}
+
 /* Styling for folders containing binary files - exclude root folder */
 .tree-item.contains-binary:not([data-level="0"]) .tree-item-name::after {
   content: "• has binary files";

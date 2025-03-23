@@ -6,7 +6,7 @@ import UserInstructions from "./components/UserInstructions";
 import { FileData, RootFolder } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
-import { PlusCircle, FolderOpen } from "lucide-react";
+import { PlusCircle, FolderOpen} from "lucide-react";
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -484,15 +484,42 @@ const App = (): JSX.Element => {
     }
   };
   
-  // Remove a root folder
-  const removeRootFolder = (rootId: string) => {
-    if (isElectron) {
-      console.log("Removing root folder:", rootId);
-      window.electron.ipcRenderer.send("remove-root-folder", rootId);
-    } else {
-      console.warn("Folder removal not available in browser");
-    }
-  };
+  // Function to remove a root folder
+  const removeRootFolder = useCallback((rootId: string) => {
+    console.log("Removing root folder:", rootId);
+    
+    setRootFolders((prevRoots: RootFolder[]) => {
+      const updatedRoots = prevRoots.filter((root: RootFolder) => root.id !== rootId);
+      // Save to localStorage
+      localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRoots));
+      return updatedRoots;
+    });
+    
+    // Remove files from this root from allFiles
+    setAllFiles((prevFiles: FileData[]) => prevFiles.filter((file: FileData) => file.rootId !== rootId));
+    
+    // Update selected files
+    setSelectedFiles((prevSelected: string[]) => 
+      prevSelected.filter((filePath: string) => {
+        const file = allFiles.find((f: FileData) => f.path === filePath);
+        return file && file.rootId !== rootId;
+      })
+    );
+  }, [allFiles]);
+  
+  // Function to remove all root folders
+  const removeAllRootFolders = useCallback(() => {
+    console.log("Removing all root folders");
+    
+    // Save empty array to localStorage
+    localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify([]));
+    
+    // Clear all state
+    setRootFolders([]);
+    setAllFiles([]);
+    setSelectedFiles([]);
+    setExpandedNodes({});
+  }, []);
 
   // Apply filters and sorting to files
   const applyFiltersAndSort = (
@@ -731,22 +758,47 @@ const App = (): JSX.Element => {
     { value: "name-desc", label: "Name: Z to A" },
   ];
 
-  // Handle expand/collapse state changes
+  // Toggle the expanded state of a node by its ID
   const toggleExpanded = (nodeId: string) => {
-    setExpandedNodes((prev: Record<string, boolean>) => {
-      const newState = {
-        ...prev,
-        [nodeId]: prev[nodeId] === undefined ? false : !prev[nodeId],
-      };
-
-      // Save to localStorage
-      localStorage.setItem(
-        STORAGE_KEYS.EXPANDED_NODES,
-        JSON.stringify(newState),
-      );
-
-      return newState;
-    });
+    // Clone the current expandedNodes to avoid direct state mutation
+    const newExpandedNodes = { ...expandedNodes };
+    
+    // Toggle the expanded state for this node
+    newExpandedNodes[nodeId] = !newExpandedNodes[nodeId];
+    
+    // For debugging
+    console.log(`Toggling node ${nodeId} to ${newExpandedNodes[nodeId] ? 'expanded' : 'collapsed'}`);
+    
+    // If this is a root node, store its expanded state in the rootFolders state as well
+    if (nodeId.startsWith('node-') && rootFolders.length > 0) {
+      const nodePath = nodeId.substring(5); // Remove 'node-' prefix
+      
+      // Find the matching root folder
+      const updatedRootFolders = rootFolders.map((root: RootFolder) => {
+        const normalizedRootPath = normalizePath(root.path);
+        const normalizedNodePath = normalizePath(nodePath);
+        
+        // Check if this is the root node being toggled
+        if (arePathsEqual(normalizedRootPath, normalizedNodePath)) {
+          console.log(`Updating root folder ${root.name} expanded state to ${newExpandedNodes[nodeId]}`);
+          return {
+            ...root,
+            isExpanded: newExpandedNodes[nodeId]
+          };
+        }
+        return root;
+      });
+      
+      // Update the rootFolders state and store in localStorage
+      setRootFolders(updatedRootFolders);
+      localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRootFolders));
+    }
+    
+    // Update expanded nodes state
+    setExpandedNodes(newExpandedNodes);
+    
+    // Also store in localStorage for persistence
+    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
   };
 
   return (
@@ -810,6 +862,8 @@ const App = (): JSX.Element => {
               selectedFolder={selectedFolder}
               openFolder={openFolder}
               addRootFolder={addRootFolder}
+              removeRootFolder={removeRootFolder}
+              removeAllRootFolders={removeAllRootFolders}
               allFiles={allFiles}
               selectedFiles={selectedFiles}
               toggleFileSelection={toggleFileSelection}

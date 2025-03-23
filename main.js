@@ -468,6 +468,32 @@ ipcMain.on("add-root-folder", async (event) => {
         return;
       }
       
+      // Check if this path is a subfolder of any existing root
+      const isSubfolderOfExistingRoot = rootFolders.some(root => 
+        isSubPath(normalizePath(root.path), normalizePath(selectedPath))
+      );
+      
+      if (isSubfolderOfExistingRoot) {
+        event.sender.send("root-folder-error", {
+          error: "This folder is a subfolder of an existing root folder",
+          path: selectedPath
+        });
+        return;
+      }
+      
+      // Check if any existing root is a subfolder of this path
+      const hasSubfolderRoot = rootFolders.some(root => 
+        isSubPath(normalizePath(selectedPath), normalizePath(root.path))
+      );
+      
+      if (hasSubfolderRoot) {
+        event.sender.send("root-folder-error", {
+          error: "An existing root folder is a subfolder of this folder",
+          path: selectedPath
+        });
+        return;
+      }
+      
       // Add to root folders array
       const newRoot = {
         id: generateRootId(),

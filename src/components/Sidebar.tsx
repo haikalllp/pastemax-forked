@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { SidebarProps, TreeNode, FileData, RootFolder } from "../types/FileTypes";
 import SearchBar from "./SearchBar";
 import TreeItem from "./TreeItem";
-import { FolderOpen, Plus, X } from "lucide-react";
+import { FolderOpen, Plus, X, Trash, Trash2 } from "lucide-react";
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -54,6 +54,8 @@ const Sidebar = ({
   selectedFolder,
   openFolder,
   addRootFolder,
+  removeRootFolder,
+  removeAllRootFolders,
   allFiles,
   selectedFiles,
   toggleFileSelection,
@@ -390,7 +392,8 @@ const Sidebar = ({
       result.push(node);
 
       // If it's a directory and it's expanded, add its children
-      if (node.type === "directory" && node.isExpanded && node.children) {
+      if (node.type === "directory" && node.isExpanded && node.children && node.children.length > 0) {
+        console.log(`Flattening ${node.children.length} children of node ${node.id} (${node.name})`);
         result = [...result, ...flattenTree(node.children)];
       }
     });
@@ -489,6 +492,17 @@ const Sidebar = ({
             >
               Deselect All
             </button>
+            {rootFolders.length > 1 && (
+              <button
+                className="sidebar-action-btn remove-all"
+                onClick={removeAllRootFolders}
+                disabled={processingStatus?.status === "processing"}
+                title="Remove all root folders"
+              >
+                <Trash2 size={14} />
+                Remove All
+              </button>
+            )}
           </div>
         ) : selectedFolder ? (
           <div className="sidebar-folder-path">{selectedFolder}</div>
@@ -538,6 +552,7 @@ const Sidebar = ({
             toggleExpanded={toggleExpanded}
             allFiles={allFiles}
             isRootNode={node.type === "root"}
+            removeRootFolder={node.level === 0 ? removeRootFolder : undefined}
           />
         ))}
       </div>
