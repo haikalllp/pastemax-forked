@@ -36,8 +36,8 @@ function ensureSerializable(data) {
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld("electron", {
   send: (channel, data) => {
-    // whitelist channels
-    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed", "add-root-folder", "remove-root-folder"];
+    // List of valid channels for sending messages to main process
+    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed", "add-root-folder", "remove-root-folder", "remove-all-root-folders"];
     if (validChannels.includes(channel)) {
       // Ensure data is serializable before sending
       const serializedData = ensureSerializable(data);
@@ -45,16 +45,9 @@ contextBridge.exposeInMainWorld("electron", {
     }
   },
   receive: (channel, func) => {
-    const validChannels = [
-      "folder-selected",
-      "file-list-data",
-      "file-processing-status",
-      "startup-mode",
-      "root-folder-added",
-      "root-folder-removed",
-      "root-folder-error"
-    ];
-    if (validChannels.includes(channel)) {
+    // List of valid channels for receiving messages from main process
+    const validReceiveChannels = ["folder-selected", "file-list-data", "file-processing-status", "app-error", "startup-mode", "root-folder-added", "root-folder-removed", "root-folder-error", "root-folders-all-removed"];
+    if (validReceiveChannels.includes(channel)) {
       // Remove any existing listeners to avoid duplicates
       ipcRenderer.removeAllListeners(channel);
       // Add the new listener
@@ -85,17 +78,10 @@ contextBridge.exposeInMainWorld("electron", {
       return wrapper;
     },
     removeListener: (channel, func) => {
-      const validChannels = [
-        "folder-selected",
-        "file-list-data",
-        "file-processing-status",
-        "startup-mode",
-        "root-folder-added",
-        "root-folder-removed",
-        "root-folder-error"
-      ];
-      if (validChannels.includes(channel)) {
-        ipcRenderer.removeListener(channel, (event, ...args) => func(...args));
+      // List of valid channels for receiving messages from main process
+      const validReceiveChannels = ["folder-selected", "file-list-data", "file-processing-status", "app-error", "startup-mode", "root-folder-added", "root-folder-removed", "root-folder-error", "root-folders-all-removed"];
+      if (validReceiveChannels.includes(channel)) {
+        ipcRenderer.removeListener(channel, func);
       }
     },
   },

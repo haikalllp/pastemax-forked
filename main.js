@@ -533,6 +533,15 @@ ipcMain.on("remove-root-folder", (event, rootId) => {
   }
 });
 
+// Handle removal of all root folders
+ipcMain.on("remove-all-root-folders", (event) => {
+  const initialLength = rootFolders.length;
+  rootFolders = [];
+  
+  console.log(`Removed all root folders (${initialLength} folders)`);
+  event.sender.send("root-folders-all-removed");
+});
+
 /**
  * Parse .gitignore files if they exist and create an ignore filter
  * Handles path normalization for cross-platform compatibility

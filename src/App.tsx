@@ -423,6 +423,13 @@ const App = (): JSX.Element => {
       });
     };
 
+    // Add new handler for when all root folders are removed
+    const handleAllRootFoldersRemoved = () => {
+      console.log("All root folders removed event received from main process");
+      // All state updates are already handled in the removeAllRootFolders function
+      // This handler is mostly for confirmation or debugging
+    };
+
     // Add event listeners
     window.electron.ipcRenderer.on("folder-selected", handleFolderSelected);
     window.electron.ipcRenderer.on("file-list-data", handleFileListData);
@@ -432,6 +439,7 @@ const App = (): JSX.Element => {
     window.electron.ipcRenderer.on("root-folder-added", handleRootFolderAdded);
     window.electron.ipcRenderer.on("root-folder-removed", handleRootFolderRemoved);
     window.electron.ipcRenderer.on("root-folder-error", handleRootFolderError);
+    window.electron.ipcRenderer.on("root-folders-all-removed", handleAllRootFoldersRemoved);
 
     return () => {
       window.electron.ipcRenderer.removeListener(
@@ -459,6 +467,10 @@ const App = (): JSX.Element => {
       window.electron.ipcRenderer.removeListener(
         "root-folder-error",
         handleRootFolderError,
+      );
+      window.electron.ipcRenderer.removeListener(
+        "root-folders-all-removed",
+        handleAllRootFoldersRemoved,
       );
     };
   }, [isElectron, sortOrder, searchTerm, allFiles]);
@@ -488,38 +500,90 @@ const App = (): JSX.Element => {
   const removeRootFolder = useCallback((rootId: string) => {
     console.log("Removing root folder:", rootId);
     
-    setRootFolders((prevRoots: RootFolder[]) => {
-      const updatedRoots = prevRoots.filter((root: RootFolder) => root.id !== rootId);
-      // Save to localStorage
-      localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRoots));
-      return updatedRoots;
-    });
+    // First find the root to get its path for cleanup
+    const rootToRemove = rootFolders.find((root: RootFolder) => root.id === rootId);
     
-    // Remove files from this root from allFiles
-    setAllFiles((prevFiles: FileData[]) => prevFiles.filter((file: FileData) => file.rootId !== rootId));
-    
-    // Update selected files
-    setSelectedFiles((prevSelected: string[]) => 
-      prevSelected.filter((filePath: string) => {
-        const file = allFiles.find((f: FileData) => f.path === filePath);
-        return file && file.rootId !== rootId;
-      })
-    );
-  }, [allFiles]);
+    if (rootToRemove) {
+      // Send IPC message to main process to remove from its cache
+      if (isElectron) {
+        window.electron.ipcRenderer.send("remove-root-folder", rootId);
+      }
+      
+      // Update rootFolders state
+      setRootFolders((prevRoots: RootFolder[]) => {
+        const updatedRoots = prevRoots.filter((root: RootFolder) => root.id !== rootId);
+        // Save to localStorage
+        localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRoots));
+        return updatedRoots;
+      });
+      
+      // Remove files from this root from allFiles
+      setAllFiles((prevFiles: FileData[]) => prevFiles.filter((file: FileData) => file.rootId !== rootId));
+      
+      // Update selected files
+      setSelectedFiles((prevSelected: string[]) => 
+        prevSelected.filter((filePath: string) => {
+          const file = allFiles.find((f: FileData) => f.path === filePath);
+          return file && file.rootId !== rootId;
+        })
+      );
+      
+      // Clean up expandedNodes for this root path
+      setExpandedNodes((prevExpanded: Record<string, boolean>) => {
+        const normalizedRootPath = normalizePath(rootToRemove.path);
+        const nodeId = `node-${normalizedRootPath}`;
+        
+        // Create a new object without entries related to this root
+        const newExpandedNodes: Record<string, boolean> = {};
+        
+        for (const [key, value] of Object.entries(prevExpanded)) {
+          // Skip any keys that start with the node ID of the root being removed
+          if (!key.startsWith(nodeId)) {
+            newExpandedNodes[key] = value;
+          }
+        }
+        
+        // Save to localStorage
+        localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
+        return newExpandedNodes;
+      });
+      
+      setProcessingStatus({
+        status: "idle",
+        message: `Removed folder: ${rootToRemove.name}`
+      });
+    }
+  }, [allFiles, rootFolders, isElectron]);
   
   // Function to remove all root folders
   const removeAllRootFolders = useCallback(() => {
     console.log("Removing all root folders");
     
-    // Save empty array to localStorage
-    localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify([]));
+    // Send IPC message to main process to clear its cache
+    if (isElectron) {
+      window.electron.ipcRenderer.send("remove-all-root-folders");
+    }
     
-    // Clear all state
+    // Clear all localStorage related to root folders and app state
+    localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify({}));
+    
+    // Consider clearing or resetting search terms if they're scoped to folders
+    localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, "");
+    setSearchTerm("");
+    
+    // Clear all in-memory state
     setRootFolders([]);
     setAllFiles([]);
     setSelectedFiles([]);
     setExpandedNodes({});
-  }, []);
+    
+    // Reset UI state
+    setProcessingStatus({
+      status: "idle",
+      message: "All root folders removed"
+    });
+  }, [isElectron]);
 
   // Apply filters and sorting to files
   const applyFiltersAndSort = (
