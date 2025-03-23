@@ -181,29 +181,40 @@ const Sidebar = ({
             const rootFolderItem = allFiles.find(file => 
               file && file.path && file.isDirectory && 
               arePathsEqual(normalizePath(file.path), normalizedRootPath) &&
-              file.rootId === rootFolder.id
+              (!file.rootId || file.rootId === rootFolder.id) // Handle both new and old files
             );
             
             // Create a root node with the correct ID format
             const rootNode: TreeNode = {
-              id: `node-${normalizedRootPath}`,
+              id: `node-${normalizedRootPath}-${rootFolder.id}`, // Include rootId in node id
               name: rootFolder.name || basename(normalizedRootPath),
               path: normalizedRootPath,
-              type: "directory", // Use directory type to maintain original UI
+              type: "directory",
               level: 0,
               children: [],
-              isExpanded: expandedNodes[`node-${normalizedRootPath}`] !== undefined 
-                ? expandedNodes[`node-${normalizedRootPath}`] 
-                : true, // Default to expanded for root folders
-              fileData: rootFolderItem,
-              rootId: rootFolder.id
+              isExpanded: expandedNodes[`node-${normalizedRootPath}-${rootFolder.id}`] !== undefined 
+                ? expandedNodes[`node-${normalizedRootPath}-${rootFolder.id}`] 
+                : true,
+              fileData: rootFolderItem || {
+                name: rootFolder.name || basename(normalizedRootPath),
+                path: normalizedRootPath,
+                isDirectory: true,
+                rootId: rootFolder.id,
+                content: "",
+                tokenCount: 0,
+                size: 0,
+                isBinary: false,
+                isSkipped: false
+              }
             };
             
             // Filter files for this root
-            const rootFiles = allFiles.filter(file => file.rootId === rootFolder.id);
+            const rootFiles = allFiles.filter(file => 
+              !file.rootId || file.rootId === rootFolder.id
+            );
             
-            // Build children tree for this root using standard directory handling
-            buildChildrenTree(rootNode, rootFiles, normalizedRootPath);
+            // Build children tree for this root
+            buildChildrenTree(rootNode, rootFiles, normalizedRootPath, rootFolder.id);
             rootTree.push(rootNode);
           });
         } 
@@ -238,172 +249,77 @@ const Sidebar = ({
           }
         }
 
-        // Count directory items for debugging
-        const directoryItems = allFiles.filter(file => file.isDirectory);
-        console.log(`Found ${directoryItems.length} directory items in allFiles`);
-        
-        if (directoryItems.length > 0) {
-          // Log the first few directory items for debugging
-          directoryItems.slice(0, 3).forEach(dir => {
-            console.log(`Directory: ${dir.name}, path: ${dir.path}, isDirectory: ${dir.isDirectory}`);
-          });
-        }
-
-        // Sort the top level (directories first, then by name)
-        const sortedTree = rootTree.sort((a, b) => {
-          if (a.type === "directory" && b.type === "file") return -1;
-          if (a.type === "file" && b.type === "directory") return 1;
-          return a.name.localeCompare(b.name);
-        });
-
-        // Apply expanded state and set the tree
-        setFileTree(sortedTree);
-        console.log("Built tree with", sortedTree.length, "root items");
+        setFileTree(rootTree);
       } catch (error) {
         console.error("Error building file tree:", error);
-        
-        // Try a simpler approach as fallback
-        try {
-          console.warn("Trying fallback flat-tree approach");
-          
-          // Create a simple flat list of all files
-          const flatTree = allFiles
-            .filter(file => !file.excludedByDefault)
-            .map(file => ({
-              id: `node-${file.path}`,
-              name: file.name || basename(file.path),
-              path: file.path,
-              type: file.isDirectory ? "directory" : "file",
-              level: 0,
-              fileData: file,
-              isExpanded: true,
-              rootId: file.rootId
-            }))
-            .sort((a, b) => {
-              // Sort directories first
-              if (a.type === "directory" && b.type === "file") return -1;
-              if (a.type === "file" && b.type === "directory") return 1;
-              return a.name.localeCompare(b.name);
-            });
-            
-            setFileTree(flatTree);
-            console.log("Built simple flat tree with", flatTree.length, "items");
-        } catch (fallbackError) {
-          console.error("Fallback tree building also failed:", fallbackError);
-          setFileTree([]);
-        }
+        setFileTree([]);
       }
     };
 
-    // Helper function to build children tree under a parent node
-    const buildChildrenTree = (parentNode: TreeNode, files: any[], parentPath: string) => {
-      // Get all files that are direct children of the parent path
-      const childFiles = files.filter(file => {
-        // Skip files without a path
-        if (!file.path) return false;
-        
-        // Skip files that are excluded by gitignore or default exclusions
-        if (file.excludedByDefault) return false;
-        
-        const normalizedFilePath = normalizePath(file.path);
-        const normalizedParentPath = normalizePath(parentPath);
-        
-        // Skip the parent folder itself
-        if (arePathsEqual(normalizedFilePath, normalizedParentPath)) return false;
-        
-        // Check if this file is a direct child of the parent
-        // We need to handle both Unix and Windows path separators
-        if (isSubPath(normalizedParentPath, normalizedFilePath)) {
-          // Get the relative path after the parent path using our utility
-          const relPath = safeRelativePath(normalizedParentPath, normalizedFilePath);
-          
-          // Count path segments to ensure it's a direct child (only one level deep)
-          const segments = makeRelativePath(relPath).split('/').filter(Boolean);
-          return segments.length === 1;
-        }
-        
+    buildTree();
+  }, [allFiles, rootFolders, selectedFolder, expandedNodes]);
+
+  // Helper function to build children tree
+  const buildChildrenTree = (
+    parentNode: TreeNode,
+    files: FileData[],
+    parentPath: string,
+    rootId: string | null = null
+  ) => {
+    // Get immediate children
+    const children = files.filter(file => {
+      if (!file || !file.path) return false;
+      
+      const normalizedFilePath = normalizePath(file.path);
+      const normalizedParentPath = normalizePath(parentPath);
+      
+      // Check if this file belongs to this root
+      if (rootId && file.rootId && file.rootId !== rootId) {
         return false;
-      });
+      }
       
-      console.log(`Building children tree for ${parentNode.name}, found ${childFiles.length} direct children`);
+      // Check if this is an immediate child
+      const isChild = isSubPath(normalizedParentPath, normalizedFilePath) &&
+        normalizedFilePath.split('/').length === normalizedParentPath.split('/').length + 1;
       
-      // Sort children (directories first, then files)
-      const sortedChildren = childFiles.sort((a: any, b: any) => {
-        // Make sure we treat isDirectory consistently
-        const aIsDir = Boolean(a.isDirectory);
-        const bIsDir = Boolean(b.isDirectory);
-        
-        if (aIsDir && !bIsDir) return -1;
-        if (!aIsDir && bIsDir) return 1;
-        return a.name.localeCompare(b.name);
-      });
+      return isChild;
+    });
+
+    // Sort children (directories first, then alphabetically)
+    children.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Create TreeNode for each child
+    children.forEach(child => {
+      const childPath = normalizePath(child.path);
+      const nodeId = rootId ? 
+        `node-${childPath}-${rootId}` : 
+        `node-${childPath}`;
       
-      // Create tree nodes for children
-      parentNode.children = sortedChildren.map((file: any, index: number) => {
-        if (!file || !file.path) {
-          console.warn("Skipping invalid file in children map");
-          return null;
-        }
-        
-        const nodePath = normalizePath(file.path);
-        const nodeId = `node-${nodePath}`;
-        const isDirectory = Boolean(file.isDirectory);
-        
-        const node: TreeNode = {
-          id: nodeId,
-          name: file.name || basename(nodePath),
-          path: nodePath,
-          type: isDirectory ? "directory" : "file",
-          level: parentNode.level + 1,
-          fileData: file,
-          isExpanded: expandedNodes[nodeId] !== undefined 
-                ? expandedNodes[nodeId] 
-                : parentNode.level === 0 ? true : false, // Auto-expand first level directories
-          rootId: file.rootId
-        };
-        
-        if (isDirectory) {
-          node.children = [];
-          buildChildrenTree(node, files, nodePath);
-        }
-        
-        return node;
-      }).filter(node => node !== null) as TreeNode[]; // Filter out null values
-    };
+      const childNode: TreeNode = {
+        id: nodeId,
+        name: child.name,
+        path: childPath,
+        type: child.isDirectory ? "directory" : "file",
+        level: parentNode.level + 1,
+        children: [],
+        isExpanded: expandedNodes[nodeId] !== undefined ? expandedNodes[nodeId] : false,
+        fileData: child
+      };
 
-    // Helper function to convert the file map to TreeNode array
-    const convertToTreeNodes = (node: Record<string, any>, level = 0): TreeNode[] => {
-      const keys = Object.keys(node);
-      return keys.map((key, index) => {
-        const item = node[key];
+      if (child.isDirectory) {
+        buildChildrenTree(childNode, files, childPath, rootId);
+      }
 
-        if (item.type === "file") {
-          return item as TreeNode;
-        } else {
-          const children = convertToTreeNodes(item.children, level + 1);
-
-          return {
-            ...item,
-            children: children.sort((a, b) => {
-              if (a.type === "directory" && b.type === "file") return -1;
-              if (a.type === "file" && b.type === "directory") return 1;
-              if (a.type === "file" && b.type === "file") {
-                const aTokens = a.fileData?.tokenCount || 0;
-                const bTokens = b.fileData?.tokenCount || 0;
-                return bTokens - aTokens;
-              }
-              return a.name.localeCompare(b.name);
-            }),
-            isExpanded: true, // Default state, will be updated later
-          };
-        }
-      });
-    };
-
-    // Use a timeout to not block UI, but with a longer delay to prevent rapid re-renders
-    const buildTreeTimeoutId = setTimeout(buildTree, 50);
-    return () => clearTimeout(buildTreeTimeoutId);
-  }, [allFiles, selectedFolder, rootFolders, expandedNodes]);
+      if (!parentNode.children) {
+        parentNode.children = [];
+      }
+      parentNode.children.push(childNode);
+    });
+  };
 
   // Flatten the tree for rendering with proper indentation
   const flattenTree = (nodes: TreeNode[]): TreeNode[] => {

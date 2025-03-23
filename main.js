@@ -737,650 +737,195 @@ function shouldSkipDirectory(dirName) {
  * @returns {Promise<Array>} Array of processed file objects
  */
 async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot = false, rootId = null) {
-  if (!isLoadingDirectory) return [];
+  // Ensure rootId is consistently handled
+  const effectiveRootId = rootId || generateRootId();
   
-  // Ensure absolute and normalized paths
-  dir = ensureAbsolutePath(dir);
-  rootDir = ensureAbsolutePath(rootDir || dir);
-  
-  // If ignoreFilter wasn't provided, load it
-  if (!ignoreFilter) {
-    ignoreFilter = await loadGitignore(rootDir, null);
+  if (!dir || !rootDir) {
+    console.error("Invalid directory paths:", { dir, rootDir });
+    return [];
   }
+
+  // Normalize paths for consistency
+  const normalizedDir = normalizePath(dir);
+  const normalizedRootDir = normalizePath(rootDir);
 
   let results = [];
-  let processedFiles = 0;
-  // Increase chunk size for better performance with large repos
-  const CHUNK_SIZE = 50;
-  // Limit directory depth to prevent excessive recursion
-  const MAX_DEPTH = 20;
-  // Tracking current depth
-  const pathSeparator = getPathSeparator();
-  const depth = isRoot ? 0 : (dir.split(pathSeparator).length - rootDir.split(pathSeparator).length);
-  
-  // Early return if we're too deep and not doing a deep scan
-  if (depth > MAX_DEPTH && !isDeepScanEnabled) {
-    console.log(`Reached max depth (${MAX_DEPTH}) at ${dir}, stopping traversal`);
-    return [{
-      name: basename(dir),
-      path: normalizePath(dir),
-      relativePath: safeRelativePath(rootDir, dir),
-      content: "",
-      tokenCount: 0,
-      size: 0,
-      isBinary: false,
-      isSkipped: true,
-      isDirectory: true,
-      error: "Max directory depth reached",
-      rootId: rootId,
-      rootPath: rootDir
-    }];
-  }
-
-  // Check if this is a directory we should skip entirely
-  const dirName = basename(dir);
-  if (!isRoot && shouldSkipDirectory(dirName)) {
-    console.log(`Skipping known problematic directory: ${dir}`);
-    return [{
-      name: dirName,
-      path: normalizePath(dir),
-      relativePath: safeRelativePath(rootDir, dir),
-      content: "",
-      tokenCount: 0,
-      size: 0,
-      isBinary: false,
-      isSkipped: true,
-      isDirectory: true,
-      error: "Directory skipped for performance",
-      rootId: rootId,
-      rootPath: rootDir
-    }];
-  }
-
-  // Add root folder if this is the top-level call
-  if (isRoot) {
-    try {
-      const stats = await fs.promises.stat(dir);
-      const rootName = basename(dir); // Get the folder name, not the full path
-      
-      const rootEntry = {
-        name: rootName,
-        path: normalizePath(dir),
-        content: "",
-        tokenCount: 0,
-        size: stats.size,
-        isBinary: false,
-        isSkipped: false,
-        isDirectory: true,
-        relativePath: "",
-        rootId: rootId,
-        rootPath: rootDir
-      };
-      
-      console.log("Added root folder to file list:", rootEntry.name, rootEntry.path);
-      results.push(rootEntry);
-    } catch (err) {
-      console.error("Error adding root folder:", err);
-    }
-  }
+  let entries;
 
   try {
-    const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
-    if (!isLoadingDirectory) return results;
+    entries = await fs.promises.readdir(normalizedDir, { withFileTypes: true });
+  } catch (error) {
+    console.error(`Error reading directory ${normalizedDir}:`, error);
+    window?.webContents.send("file-processing-status", {
+      status: "error",
+      message: `Error reading directory: ${error.message}`,
+      path: normalizedDir,
+      rootId: effectiveRootId
+    });
+    return [];
+  }
 
-    const directories = dirents.filter(dirent => dirent.isDirectory());
-    const files = dirents.filter(dirent => dirent.isFile());
+  // Update progress counters
+  totalDirectoriesProcessed++;
+  if (isRoot) {
+    totalDirectoriesFound = 1; // Reset for new root
+    totalFilesFound = 0;
+    totalFilesProcessed = 0;
+  }
+
+  // Process each entry
+  for (const entry of entries) {
+    const fullPath = safePathJoin(normalizedDir, entry.name);
     
-    // Update counter for found files and directories
-    totalFilesFound += files.length;
-    totalDirectoriesFound += directories.length;
+    // Skip if path is invalid or should be excluded
+    if (!_isValidPath(fullPath) || shouldSkipDirectory(entry.name)) {
+      continue;
+    }
 
-    // Process directories first, but in chunks to avoid blocking UI
-    for (let i = 0; i < directories.length; i += CHUNK_SIZE) {
-      if (!isLoadingDirectory) return results;
+    // Apply gitignore filter
+    const relativePath = makeRelativePath(normalizedRootDir, fullPath);
+    if (ignoreFilter && ignoreFilter(relativePath)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      totalDirectoriesFound++;
       
-      const directoryChunk = directories.slice(i, i + CHUNK_SIZE);
+      // Process subdirectory
+      const subResults = await readFilesRecursively(
+        fullPath,
+        normalizedRootDir,
+        ignoreFilter,
+        window,
+        false,
+        effectiveRootId // Pass the effective rootId to maintain consistency
+      );
       
-      // Use Promise.all to process directory chunk in parallel
-      const dirResults = await Promise.all(directoryChunk.map(async (dirent) => {
-        if (!isLoadingDirectory) return null;
+      // Add directory entry with rootId
+      results.push({
+        name: entry.name,
+        path: fullPath,
+        relativePath,
+        isDirectory: true,
+        children: [],
+        rootId: effectiveRootId // Include rootId for directories
+      });
+      
+      results = results.concat(subResults);
+      
+    } else if (entry.isFile()) {
+      totalFilesFound++;
+      
+      try {
+        const stats = await fs.promises.stat(fullPath);
         
-        // Quick check if this is a directory we want to completely skip
-        if (shouldSkipDirectory(dirent.name)) {
-          console.log(`Quickly skipping known directory: ${dirent.name}`);
-          totalDirectoriesProcessed++;
-          return [{
-            name: dirent.name,
-            path: normalizePath(safePathJoin(dir, dirent.name)),
-            relativePath: safeRelativePath(rootDir, safePathJoin(dir, dirent.name)),
-            content: "",
-            tokenCount: 0,
-            size: 0,
-            isBinary: false,
-            isSkipped: true,
-            isDirectory: true,
-            error: "Directory skipped for performance",
-            rootId: rootId,
-            rootPath: rootDir
-          }];
+        // Skip files that are too large
+        if (stats.size > MAX_FILE_SIZE) {
+          console.log(`Skipping large file: ${fullPath} (${stats.size} bytes)`);
+          continue;
         }
-        
-        const fullPath = safePathJoin(dir, dirent.name);
-        // Calculate relative path safely
-        const relativePath = safeRelativePath(rootDir, fullPath);
-        
-        // Skip PasteMax app directories and invalid paths
-        if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
-            !isValidPath(relativePath) || relativePath.startsWith('..')) {
-          console.log('Skipping directory:', fullPath);
-          return null;
+
+        // Create file entry with rootId
+        const fileEntry = {
+          name: entry.name,
+          path: fullPath,
+          relativePath,
+          isDirectory: false,
+          size: stats.size,
+          modifiedTime: stats.mtime,
+          rootId: effectiveRootId // Include rootId for files
+        };
+
+        // Add binary flag for binary files
+        if (isBinaryFile(fullPath)) {
+          fileEntry.isBinary = true;
         }
-        
-        // FIRST CHECK: Check if directory should be excluded by .gitignore or default patterns
-        try {
-          // Check if directory should be excluded by default patterns
-          const normalizedPath = normalizePath(fullPath);
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
-          
-          // Check if directory should be excluded by gitignore filter
-          const isIgnored = ignoreFilter && 
-                           typeof ignoreFilter.ignores === 'function' && 
-                           relativePath && 
-                           relativePath.trim() !== '' && 
-                           ignoreFilter.ignores(relativePath);
-          
-          // Skip the directory if it should be excluded by either pattern
-          if (shouldExclude || isIgnored) {
-            console.log(`Skipping excluded directory: ${relativePath}`);
-            totalDirectoriesProcessed++;
-            return null;
-          }
-        } catch (ignoreErr) {
-          console.error(`Error checking exclusion patterns for directory ${fullPath}:`, ignoreErr);
-        }
-        
-        let directoryResults = [];
-        
-        // Add the directory itself to the results
-        try {
-          const dirStats = await fs.promises.stat(fullPath);
-          directoryResults.push({
-            name: dirent.name,
-            path: normalizePath(fullPath),
-            relativePath: relativePath,
-            tokenCount: 0,
-            size: dirStats.size || 0,
-            content: "",
-            isBinary: false,
-            isSkipped: false,
-            isDirectory: true,
-            error: null,
-            rootId: rootId,
-            rootPath: rootDir
-          });
-        } catch (dirErr) {
-          console.error(`Error adding directory ${fullPath}:`, dirErr);
-          // Still add the directory entry with default values if we can't stat it
-          directoryResults.push({
-            name: dirent.name,
-            path: normalizePath(fullPath),
-            relativePath: relativePath,
-            tokenCount: 0,
-            size: 0,
-            content: "",
-            isBinary: false,
-            isSkipped: false,
-            isDirectory: true,
-            error: `Error reading directory: ${dirErr.message}`,
-            rootId: rootId,
-            rootPath: rootDir
+
+        results.push(fileEntry);
+        totalFilesProcessed++;
+
+        // Send progress update
+        if (window && totalFilesFound > 0) {
+          window.webContents.send("file-processing-status", {
+            status: "processing",
+            processed: totalFilesProcessed,
+            total: totalFilesFound,
+            current: fullPath,
+            rootId: effectiveRootId
           });
         }
-        
-        // Process contents if not in an ignored location
-        try {
-          // Skip certain directories that tend to be problematic
-          if ((depth >= 5 && !isDeepScanEnabled)) {
-            // For these, just add the directory but don't process contents
-            console.log(`Skipping deep traversal of ${relativePath} at depth ${depth}`);
-          } else {
-            const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false, rootId);
-            if (!isLoadingDirectory) return null;
-            
-            if (Array.isArray(subResults)) {
-              directoryResults = directoryResults.concat(subResults);
-            } else {
-              console.warn(`Non-array result from recursive call for ${fullPath}:`, subResults);
-            }
-          }
-        } catch (subDirErr) {
-          console.error(`Error processing subdirectory ${fullPath}:`, subDirErr);
-        }
-        
-        totalDirectoriesProcessed++;
-        return directoryResults;
-      }));
-      
-      // Flatten and add directory results
-      results = results.concat(dirResults.filter(Boolean).flat());
-      
-      // Update UI with progress after each chunk
-      window.webContents.send("file-processing-status", {
-        status: "processing",
-        message: `Scanning directories... ${totalDirectoriesProcessed}/${totalDirectoriesFound} (Press ESC to cancel)`,
-      });
-      
-      // Add a small delay between directory chunks to keep UI responsive
-      if (i + CHUNK_SIZE < directories.length) {
-        await new Promise(resolve => setTimeout(resolve, 10));
+      } catch (error) {
+        console.error(`Error processing file ${fullPath}:`, error);
       }
     }
+  }
 
-    // Process files in chunks
-    for (let i = 0; i < files.length; i += CHUNK_SIZE) {
-      if (!isLoadingDirectory) return results;
-
-      const chunk = files.slice(i, i + CHUNK_SIZE);
-      
-      const chunkPromises = chunk.map(async (dirent) => {
-        if (!isLoadingDirectory) return null;
-
-        const fullPath = safePathJoin(dir, dirent.name);
-        // Calculate relative path safely
-        const relativePath = safeRelativePath(rootDir, fullPath);
-
-        // Skip PasteMax app files and invalid paths
-        if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
-            !isValidPath(relativePath) || relativePath.startsWith('..')) {
-          console.log('Skipping file:', fullPath);
-          return null;
-        }
-        
-        // FIRST CHECK: Check if the file should be excluded by default patterns or gitignore
-        const normalizedPath = normalizePath(fullPath);
-        try {
-          // Check if file should be excluded by default patterns
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
-          
-          // Check if file should be excluded by gitignore filter
-          const isIgnored = ignoreFilter && 
-                           typeof ignoreFilter.ignores === 'function' && 
-                           relativePath && 
-                           relativePath.trim() !== '' && 
-                           ignoreFilter.ignores(relativePath);
-          
-          // Skip the file if it should be excluded by either pattern
-          if (shouldExclude || isIgnored) {
-            console.log(`Skipping excluded file: ${relativePath}`);
-            totalFilesProcessed++;
-            return null;
-          }
-        } catch (ignoreErr) {
-          console.error(`Error checking exclusion patterns for ${fullPath}:`, ignoreErr);
-        }
-
-        // SECOND CHECK: Only after the file passes exclusion checks, we process it further
-        try {
-          const stats = await fs.promises.stat(fullPath);
-          if (!isLoadingDirectory) return null;
-          
-          // Now check if file is binary based on extension
-          const isBin = isBinaryFile(fullPath);
-          
-          if (stats.size > MAX_FILE_SIZE) {
-            totalFilesProcessed++;
-            return {
-              name: dirent.name,
-              path: normalizePath(fullPath),
-              relativePath: relativePath,
-              tokenCount: 0,
-              size: stats.size,
-              content: "",
-              isBinary: isBin, // Mark as binary if detected by extension
-              isSkipped: true,
-              isDirectory: false,
-              error: "File too large to process",
-              rootId: rootId,
-              rootPath: rootDir
-            };
-          }
-
-          // Always tag binary files but include them in results
-          if (isBin) {
-            totalFilesProcessed++;
-            return {
-              name: dirent.name,
-              path: normalizePath(fullPath),
-              relativePath: relativePath,
-              tokenCount: 0,
-              size: stats.size,
-              content: "",
-              isBinary: true,
-              isSkipped: false,
-              isDirectory: false,
-              fileType: path.extname(fullPath).substring(1).toUpperCase(),
-              rootId: rootId,
-              rootPath: rootDir
-            };
-          }
-
-          // For non-binary files, read and process content
-          try {
-            const fileContent = await fs.promises.readFile(fullPath, "utf8");
-            if (!isLoadingDirectory) return null;
-            
-            totalFilesProcessed++;
-            return {
-              name: dirent.name,
-              path: normalizePath(fullPath),
-              relativePath: relativePath,
-              content: fileContent,
-              tokenCount: countTokens(fileContent),
-              size: stats.size,
-              isBinary: false,
-              isSkipped: false,
-              isDirectory: false,
-              rootId: rootId,
-              rootPath: rootDir
-            };
-          } catch (readErr) {
-            // If we couldn't read as UTF-8, try to detect if it's binary
-            try {
-              // Read a small sample of the file as a buffer to check
-              const buffer = await fs.promises.readFile(fullPath, { encoding: null, flag: 'r', length: 512 });
-              const isBinaryContent = detectBinaryContent(buffer);
-              
-              totalFilesProcessed++;
-              if (isBinaryContent) {
-                return {
-                  name: dirent.name,
-                  path: normalizePath(fullPath),
-                  relativePath: relativePath,
-                  tokenCount: 0,
-                  size: stats.size,
-                  content: "",
-                  isBinary: true,
-                  isSkipped: false,
-                  isDirectory: false,
-                  fileType: path.extname(fullPath).substring(1).toUpperCase() || "BIN",
-                  rootId: rootId,
-                  rootPath: rootDir
-                };
-              } else {
-                // Not binary but still couldn't read as UTF-8
-                return {
-                  name: dirent.name,
-                  path: normalizePath(fullPath),
-                  relativePath: relativePath,
-                  tokenCount: 0,
-                  size: stats.size,
-                  content: "",
-                  isBinary: false,
-                  isSkipped: true,
-                  isDirectory: false,
-                  error: "File encoding not supported",
-                  rootId: rootId,
-                  rootPath: rootDir
-                };
-              }
-            } catch (bufferErr) {
-              console.error(`Error reading file buffer ${fullPath}:`, bufferErr);
-              totalFilesProcessed++;
-              return {
-                name: dirent.name,
-                path: normalizePath(fullPath),
-                relativePath: relativePath,
-                tokenCount: 0,
-                size: stats.size,
-                content: "",
-                isBinary: false,
-                isSkipped: true,
-                isDirectory: false,
-                error: "Failed to read file: " + bufferErr.message,
-                rootId: rootId,
-                rootPath: rootDir
-              };
-            }
-          }
-        } catch (err) {
-          console.error(`Error reading file ${fullPath}:`, err);
-          totalFilesProcessed++;
-          return {
-            name: dirent.name,
-            path: normalizePath(fullPath),
-            relativePath: relativePath,
-            tokenCount: 0,
-            size: 0,
-            isBinary: false,
-            isSkipped: true,
-            isDirectory: false,
-            error: err.code === 'EPERM' ? "Permission denied" : 
-                   err.code === 'ENOENT' ? "File not found" : 
-                   "Could not read file",
-            rootId: rootId,
-            rootPath: rootDir
-          };
-        }
-      });
-
-      const chunkResults = await Promise.all(chunkPromises);
-      if (!isLoadingDirectory) return results;
-      
-      results = results.concat(chunkResults.filter(result => result !== null));
-      processedFiles += chunk.length;
-      
-      window.webContents.send("file-processing-status", {
-        status: "processing",
-        message: `Processing files... ${totalFilesProcessed}/${totalFilesFound} (Press ESC to cancel)`,
-      });
-      
-      // Add a small delay between file chunks to keep UI responsive
-      if (i + CHUNK_SIZE < files.length) {
-        await new Promise(resolve => setTimeout(resolve, 5));
-      }
-    }
-  } catch (err) {
-    console.error(`Error reading directory ${dir}:`, err);
-    if (err.code === 'EPERM' || err.code === 'EACCES') {
-      console.log(`Skipping inaccessible directory: ${dir}`);
-      return results;
-    }
+  // Send completion status for root directory
+  if (isRoot && window) {
+    window.webContents.send("file-processing-status", {
+      status: "complete",
+      processed: totalFilesProcessed,
+      total: totalFilesFound,
+      rootId: effectiveRootId
+    });
   }
 
   return results;
 }
 
 // Handle file list request
-ipcMain.on("request-file-list", async (event, folderPath) => {
-  try {
-    console.log("Processing file list for folder:", folderPath);
-    console.log("OS platform:", os.platform());
-    console.log("Path separator:", getPathSeparator());
+ipcMain.on("request-file-list", async (event, { folderPath, rootId = null }) => {
+  if (!isLoadingDirectory) {
+    console.log("Directory loading is not active");
+    return;
+  }
 
-    // Find the root ID for this folder path
-    let rootId = null;
-    const matchingRoot = rootFolders.find(root => 
-      arePathsEqual(normalizePath(root.path), normalizePath(folderPath))
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) {
+    console.error("No window found for file list request");
+    return;
+  }
+
+  try {
+    // Reset progress counters for this request
+    resetProgressCounters();
+
+    // Load gitignore filter for this root
+    const ignoreFilter = await loadGitignore(folderPath, event.sender);
+
+    // Process the directory
+    const files = await readFilesRecursively(
+      folderPath,
+      folderPath,
+      ignoreFilter,
+      window,
+      true,
+      rootId
     );
-    
-    if (matchingRoot) {
-      rootId = matchingRoot.id;
-      console.log(`Found rootId ${rootId} for path ${folderPath}`);
-    } else {
-      // For backward compatibility, generate a temporary ID
-      rootId = generateRootId();
-      console.log(`No matching root found, using temporary ID: ${rootId}`);
+
+    if (!Array.isArray(files)) {
+      console.error("Error: readFilesRecursively did not return an array");
+      event.sender.send("file-list-data", {
+        error: "Failed to read directory structure",
+        files: [],
+        rootId
+      });
+      return;
     }
 
-    // Reset progress counters
-    resetProgressCounters();
-    
-    // Set the loading flag to true - this is a significant operation
-    isLoadingDirectory = true;
-    isHandlingGitignore = false; // Reset gitignore flag to start fresh
-    
-    // Get the current BrowserWindow
-    const window = BrowserWindow.fromWebContents(event.sender);
-    
-    // Set up a safety timeout
-    setupDirectoryLoadingTimeout(window, folderPath);
-
-    // Send initial progress update
-    event.sender.send("file-processing-status", {
-      status: "processing",
-      message: "Scanning directory structure...",
+    // Send the results back to the renderer
+    event.sender.send("file-list-data", {
+      files,
+      rootId,
+      error: null
     });
 
-    // Process files in a way that can be properly awaited
-    const processFiles = async () => {
-      try {
-        console.log("Starting directory scan, isLoadingDirectory =", isLoadingDirectory);
-        
-        // Set gitignore flag to true before loading gitignore
-        isHandlingGitignore = true;
-        
-        // Initialize the gitignore filter once to avoid re-reading it for each directory
-        // This is important to do first as it determines what files we'll skip entirely
-        console.log("Initializing gitignore filters before file traversal");
-        const ignoreFilter = await loadGitignore(folderPath, event);
-        
-        // Reset gitignore handling flag after loading
-        isHandlingGitignore = false;
-        
-        // Log some info about the ignore filter to help with debugging
-        console.log("Ignore filter initialized, proceeding with directory traversal");
-        console.log("Note: Files in ignored directories will be completely skipped");
-        console.log("      Binary files in non-ignored directories will be included but tagged as binary");
-        console.log("      Priority: 1. Directory ignores, 2. File ignores, 3. Binary detection");
-        
-        // Update status now that gitignore is done
-        event.sender.send("file-processing-status", {
-          status: "processing",
-          message: "Reading files...",
-        });
-        
-        // Await the result of readFilesRecursively
-        const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true, rootId);
-        console.log(`Found ${files ? files.length : 0} files in ${folderPath}`);
-
-        if (!files || !Array.isArray(files)) {
-          console.error("Error: readFilesRecursively did not return an array");
-          event.sender.send("file-processing-status", {
-            status: "error",
-            message: "Error: Failed to process directory structure",
-          });
-          return;
-        }
-
-        // Update with processing near-complete status 
-        event.sender.send("file-processing-status", {
-          status: "processing",
-          message: `Finalizing ${files.length} files...`,
-        });
-
-        // Process the files to ensure they're serializable
-        const serializableFiles = await Promise.all(files.map(async (file) => {
-          // Normalize the path to use forward slashes consistently
-          const normalizedPath = normalizePath(file.path);
-          
-          // Check if we should exclude this file by default - correctly await the async function
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
-          
-          // Create a clean file object
-          return {
-            name: file.name ? String(file.name) : "",
-            path: normalizedPath, // Use normalized path
-            tokenCount: typeof file.tokenCount === "number" ? file.tokenCount : 0,
-            size: typeof file.size === "number" ? file.size : 0,
-            content: file.isBinary || file.isDirectory
-              ? ""
-              : typeof file.content === "string"
-              ? file.content
-              : "",
-            isBinary: Boolean(file.isBinary),
-            isSkipped: Boolean(file.isSkipped),
-            error: file.error ? String(file.error) : null,
-            fileType: file.fileType ? String(file.fileType) : null,
-            excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault
-            isDirectory: Boolean(file.isDirectory),
-            rootId: file.rootId,
-            rootPath: file.rootPath
-          };
-        }));
-
-        try {
-          console.log(`Sending ${serializableFiles.length} files to renderer`);
-          // Log a sample of paths to check normalization
-          if (serializableFiles.length > 0) {
-            console.log("Sample file paths (first 3):");
-            serializableFiles.slice(0, 3).forEach(file => {
-              console.log(`- Name: ${file.name}, Path: ${file.path}, isDirectory: ${file.isDirectory}`);
-            });
-
-            // Log some directory entries specifically
-            const directoryEntries = serializableFiles.filter(file => file.isDirectory);
-            console.log(`Found ${directoryEntries.length} directory entries`);
-            if (directoryEntries.length > 0) {
-              console.log("Sample directory entries (first 3):");
-              directoryEntries.slice(0, 3).forEach(dir => {
-                console.log(`- Name: ${dir.name}, Path: ${dir.path}, isDirectory: ${dir.isDirectory}`);
-              });
-            }
-          }
-          
-          // First, send a final processing status update
-          event.sender.send("file-processing-status", {
-            status: "complete",
-            message: `Found ${serializableFiles.length} files (processed ${totalFilesProcessed} files in ${totalDirectoriesProcessed} directories)`,
-          });
-          
-          // Then send the actual file data
-          event.sender.send("file-list-data", serializableFiles);
-        } catch (sendErr) {
-          console.error("Error sending file data:", sendErr);
-
-          // If sending fails, try again with minimal data
-          const minimalFiles = serializableFiles.map((file) => ({
-            name: file.name,
-            path: file.path,
-            tokenCount: file.tokenCount,
-            size: file.size,
-            isBinary: file.isBinary,
-            isSkipped: file.isSkipped,
-            excludedByDefault: file.excludedByDefault,
-            isDirectory: file.isDirectory,
-            rootId: file.rootId,
-            rootPath: file.rootPath
-          }));
-
-          event.sender.send("file-list-data", minimalFiles);
-        }
-      } catch (error) {
-        console.error("Error in file processing:", error);
-        event.sender.send("file-processing-status", {
-          status: "error",
-          message: `Error: ${error.message || "Unknown error during file processing"}`,
-        });
-      } finally {
-        // Clear the loading flag when done
-        isLoadingDirectory = false;
-        isHandlingGitignore = false;
-        if (loadingTimeoutId) {
-          clearTimeout(loadingTimeoutId);
-          loadingTimeoutId = null;
-        }
-      }
-    };
-
-    // Use setTimeout to allow UI to update before processing starts
-    setTimeout(() => processFiles(), 100);
-  } catch (err) {
-    console.error("Error processing file list:", err);
-    isLoadingDirectory = false;
-    isHandlingGitignore = false;
-    event.sender.send("file-processing-status", {
-      status: "error",
-      message: `Error: ${err.message}`,
+  } catch (error) {
+    console.error("Error processing directory:", error);
+    event.sender.send("file-list-data", {
+      error: error.message || "Failed to process directory",
+      files: [],
+      rootId
     });
   }
 });
