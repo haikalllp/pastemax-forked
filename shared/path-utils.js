@@ -390,8 +390,8 @@ function getPathSeparator() {
   return isWindows ? '\\' : '/';
 }
 
-// Export all utilities
-module.exports = {
+// Create a utilities object
+const pathUtils = {
   normalizePath,
   makeRelativePath,
   basename,
@@ -407,5 +407,22 @@ module.exports = {
   getPathSeparator,
   isWindows,
   isNode,
-  isMac,
-}; 
+  isMac
+};
+
+// Check if we're in a Node.js environment to use module.exports
+// Otherwise set it as a global in the browser or other JS environments
+if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
+  // Node.js environment
+  module.exports = pathUtils;
+} else {
+  // Browser or other JS environment (Web Workers, etc.)
+  // Use self, globalThis, or window depending on what's available
+  const globalObject = typeof globalThis !== 'undefined' ? globalThis :
+                      typeof self !== 'undefined' ? self :
+                      typeof window !== 'undefined' ? window : 
+                      this;
+  
+  // Assign the path utilities to the global object
+  globalObject.pathUtils = pathUtils;
+} 

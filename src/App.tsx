@@ -11,14 +11,34 @@ import ThemeToggle from "./components/ThemeToggle";
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import{ 
+import * as pathUtils from "./utils/pathUtils";
+
+// Ensure we have the critical path utilities, with fallbacks if needed
+const {
   generateAsciiFileTree,
   normalizePath,
-  arePathsEqual,
-  isSubPath,
-  join,
-  basename } 
-  from "./utils/pathUtils";
+  arePathsEqual = (path1: string, path2: string): boolean => {
+    // Fallback implementation if the imported version isn't available
+    if (!path1 && !path2) return true;
+    if (!path1 || !path2) return false;
+    return normalizePath(path1).toLowerCase() === normalizePath(path2).toLowerCase();
+  },
+  isSubPath = (parent: string, child: string): boolean => {
+    // Fallback implementation if the imported version isn't available
+    if (!parent || !child) return false;
+    const normalizedParent = normalizePath(parent);
+    const normalizedChild = normalizePath(child);
+    return normalizedChild.toLowerCase().startsWith(normalizedParent.toLowerCase());
+  },
+  join = (...parts: string[]): string => parts.filter(Boolean).join('/'),
+  basename = (path: string): string => {
+    // Fallback implementation if the imported version isn't available
+    if (!path) return "";
+    const normalizedPath = normalizePath(path);
+    const parts = normalizedPath.split("/");
+    return parts[parts.length - 1] || "";
+  }
+} = pathUtils;
 
 // Access the electron API from the window object
 declare global {
@@ -485,6 +505,7 @@ const App = (): JSX.Element => {
   // Calculate total tokens from selected files
   const calculateTotalTokens = () => {
     return selectedFiles.reduce((total: number, path: string) => {
+      // Use our safely imported arePathsEqual function
       const file = allFiles.find((f: FileData) => arePathsEqual(f.path, path));
       return total + (file ? file.tokenCount : 0);
     }, 0);

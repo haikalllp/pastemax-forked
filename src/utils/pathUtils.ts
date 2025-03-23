@@ -7,29 +7,99 @@
  * React/browser-specific functionality.
  */
 
-// Import all path utilities from our shared module
-import * as sharedPathUtils from '../../shared/path-utils';
+// Determine if pathUtils is available from a global or from an import
+// This handles both the CommonJS and browser environments
+let pathUtilsModule: any;
 
-// Re-export everything from the shared module
-export const {
-  normalizePath,
-  makeRelativePath,
-  basename,
-  dirname,
-  join,
-  extname,
-  arePathsEqual,
-  isSubPath,
-  safePathJoin,
-  safeRelativePath,
-  ensureAbsolutePath,
-  isValidPath,
-  getPathSeparator,
-  isNode
-} = sharedPathUtils;
+// Check if we're in a browser environment where pathUtils might be globally defined
+if (typeof window !== 'undefined' && (window as any).pathUtils) {
+  pathUtilsModule = (window as any).pathUtils;
+} else if (typeof self !== 'undefined' && (self as any).pathUtils) {
+  pathUtilsModule = (self as any).pathUtils;
+} else if (typeof globalThis !== 'undefined' && (globalThis as any).pathUtils) {
+  pathUtilsModule = (globalThis as any).pathUtils;
+} else {
+  // Try normal import as a fallback
+  try {
+    // Import from the shared module
+    const sharedPathUtils = require('../../shared/path-utils');
+    pathUtilsModule = sharedPathUtils.default || sharedPathUtils;
+  } catch (e) {
+    console.error('Failed to import path utilities', e);
+    
+    // Provide minimal fallback implementations for critical functions
+    pathUtilsModule = {
+      normalizePath: (path: string) => path?.replace(/\\/g, '/') || path,
+      makeRelativePath: (path: string) => path?.replace(/^\//, '') || path,
+      basename: (path: string) => {
+        if (!path) return '';
+        const parts = path.replace(/\\/g, '/').replace(/\/$/, '').split('/');
+        return parts[parts.length - 1] || '';
+      },
+      dirname: (path: string) => {
+        if (!path) return '.';
+        const normalizedPath = path.replace(/\\/g, '/');
+        const lastSlash = normalizedPath.lastIndexOf('/');
+        return lastSlash === -1 ? '.' : normalizedPath.slice(0, lastSlash);
+      },
+      join: (...parts: string[]) => parts.filter(Boolean).join('/'),
+      arePathsEqual: (path1: string, path2: string) => {
+        if (!path1 && !path2) return true;
+        if (!path1 || !path2) return false;
+        return path1.replace(/\\/g, '/').toLowerCase() === 
+               path2.replace(/\\/g, '/').toLowerCase();
+      },
+      isSubPath: (parent: string, child: string) => {
+        if (!parent || !child) return false;
+        const normalizedParent = parent.replace(/\\/g, '/').replace(/\/$/, '') + '/';
+        const normalizedChild = child.replace(/\\/g, '/');
+        return normalizedChild.toLowerCase().startsWith(normalizedParent.toLowerCase());
+      },
+      isNode: false,
+      isWindows: typeof navigator !== 'undefined' && navigator.platform && /win/i.test(navigator.platform)
+    };
+  }
+}
 
-// Rename isWindows const to _isWindows for local use
-const _isWindows = sharedPathUtils.isWindows;
+// Export individual functions to ensure they're always available
+export const normalizePath = pathUtilsModule.normalizePath;
+export const makeRelativePath = pathUtilsModule.makeRelativePath;
+export const basename = pathUtilsModule.basename;
+export const dirname = pathUtilsModule.dirname;
+export const join = pathUtilsModule.join;
+export const extname = pathUtilsModule.extname || ((path: string) => {
+  const base = basename(path);
+  const dotIndex = base.lastIndexOf('.');
+  return dotIndex === -1 ? '' : base.slice(dotIndex);
+});
+export const arePathsEqual = pathUtilsModule.arePathsEqual;
+export const isSubPath = pathUtilsModule.isSubPath;
+export const safePathJoin = pathUtilsModule.safePathJoin || join;
+export const safeRelativePath = pathUtilsModule.safeRelativePath || ((from: string, to: string) => {
+  const normFrom = normalizePath(from);
+  const normTo = normalizePath(to);
+  if (normTo.startsWith(normFrom)) {
+    return normTo.slice(normFrom.length).replace(/^\//, '');
+  }
+  return normTo;
+});
+export const ensureAbsolutePath = pathUtilsModule.ensureAbsolutePath || normalizePath;
+export const isValidPath = pathUtilsModule.isValidPath || ((path: string) => {
+  if (!path) return false;
+  return typeof path === 'string' && 
+         !path.includes('*') && 
+         !path.includes('?') && 
+         !path.includes('<') && 
+         !path.includes('>') && 
+         !path.includes('|');
+});
+export const getPathSeparator = pathUtilsModule.getPathSeparator || (() => '/');
+export const isNode = !!pathUtilsModule.isNode;
+
+// Handle isWindows which might be a function or a boolean
+const _isWindows = typeof pathUtilsModule.isWindows === 'function' 
+  ? pathUtilsModule.isWindows() 
+  : !!pathUtilsModule.isWindows;
 
 /**
  * Detects the operating system

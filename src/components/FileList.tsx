@@ -1,7 +1,16 @@
 import React from "react";
 import { FileListProps, FileData } from "../types/FileTypes";
 import FileCard from "./FileCard";
-import { arePathsEqual } from "../utils/pathUtils";
+import * as pathUtils from "../utils/pathUtils";
+
+// Ensure we have the critical path utilities, with fallbacks if needed
+const {
+  arePathsEqual = (path1: string, path2: string): boolean => {
+    if (!path1 && !path2) return true;
+    if (!path1 || !path2) return false;
+    return path1.replace(/\\/g, '/').toLowerCase() === path2.replace(/\\/g, '/').toLowerCase();
+  }
+} = pathUtils;
 
 const FileList = ({
   files,

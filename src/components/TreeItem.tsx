@@ -4,7 +4,23 @@ import React, {
 } from "react";
 import { TreeItemProps, TreeNode, FileData } from "../types/FileTypes";
 import { ChevronRight, File, Folder } from "lucide-react";
-import { arePathsEqual, normalizePath, isSubPath } from "../utils/pathUtils";
+import * as pathUtils from "../utils/pathUtils";
+
+// Ensure we have the critical path utilities, with fallbacks if needed
+const {
+  normalizePath = (path: string): string => path?.replace(/\\/g, '/') || path,
+  arePathsEqual = (path1: string, path2: string): boolean => {
+    if (!path1 && !path2) return true;
+    if (!path1 || !path2) return false;
+    return normalizePath(path1).toLowerCase() === normalizePath(path2).toLowerCase();
+  },
+  isSubPath = (parent: string, child: string): boolean => {
+    if (!parent || !child) return false;
+    const normalizedParent = normalizePath(parent).replace(/\/+$/, '') + '/';
+    const normalizedChild = normalizePath(child);
+    return normalizedChild.toLowerCase().startsWith(normalizedParent.toLowerCase());
+  }
+} = pathUtils;
 
 /**
  * TreeItem represents a single item (file or folder) in the file tree.

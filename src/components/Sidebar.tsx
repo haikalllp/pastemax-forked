@@ -7,15 +7,38 @@ import TreeItem from "./TreeItem";
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { 
-  normalizePath, 
-  join, 
-  isSubPath, 
-  arePathsEqual, 
-  basename,
-  safeRelativePath,
-  makeRelativePath
-} from "../utils/pathUtils";
+import * as pathUtils from "../utils/pathUtils";
+
+// Ensure we have the critical path utilities, with fallbacks if needed
+const {
+  normalizePath = (path: string): string => path?.replace(/\\/g, '/') || path,
+  join = (...parts: string[]): string => parts.filter(Boolean).join('/'),
+  isSubPath = (parent: string, child: string): boolean => {
+    if (!parent || !child) return false;
+    const normalizedParent = normalizePath(parent).replace(/\/+$/, '') + '/';
+    const normalizedChild = normalizePath(child);
+    return normalizedChild.toLowerCase().startsWith(normalizedParent.toLowerCase());
+  },
+  arePathsEqual = (path1: string, path2: string): boolean => {
+    if (!path1 && !path2) return true;
+    if (!path1 || !path2) return false;
+    return normalizePath(path1).toLowerCase() === normalizePath(path2).toLowerCase();
+  },
+  basename = (path: string): string => {
+    if (!path) return '';
+    const parts = normalizePath(path).split('/');
+    return parts[parts.length - 1] || '';
+  },
+  safeRelativePath = (from: string, to: string): string => {
+    // Simple implementation that just returns the base path if both are provided
+    if (!from || !to) return to || '';
+    return to;
+  },
+  makeRelativePath = (from: string, to: string): string => {
+    // Simplified fallback that just returns the target path
+    return to || '';
+  }
+} = pathUtils;
 
 /**
  * The Sidebar component displays a tree view of files and folders, allowing users to:
