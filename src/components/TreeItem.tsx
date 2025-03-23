@@ -101,8 +101,8 @@ const TreeItem = ({
   // Add additional class for top-level directories (level 0)
   const isTopLevelDirectory = type === "directory" && level === 0;
   
-  // Handle remove root folder click
-  const handleRemoveClick = (e: any) => {
+  // Handle removing a root folder
+  const handleRemoveRoot = (e: any) => {
     e.stopPropagation();
     if (removeRootFolder && rootId) {
       removeRootFolder(rootId);
@@ -111,92 +111,71 @@ const TreeItem = ({
   
   return (
     <div
-      className={`tree-item ${isSelected ? "selected" : ""} ${
-        isExcludedByDefault ? "excluded-by-default" : ""
-      } ${isBinary ? "has-binary" : ""} ${hasBinaryFiles ? "contains-binary" : ""} ${
-        isTopLevelDirectory ? "top-level-directory" : ""
-      }`}
-      style={{ marginLeft: `${level * 16}px` }}
+      className={`tree-item ${type === "file" ? "file-item" : "directory-item"} ${
+        isSelected ? "selected" : ""
+      } ${isDisabled ? "disabled" : ""} ${isBinary ? "binary" : ""} ${
+        isSkipped ? "skipped" : ""
+      } ${isExcludedByDefault ? "excluded" : ""} ${
+        hasBinaryFiles ? "has-binary" : ""
+      } ${isTopLevelDirectory ? "top-level-directory" : ""}`}
       onClick={handleItemClick}
-      data-level={level}
+      style={{
+        paddingLeft: `${(level) * 16}px`,
+      }}
     >
-      {/* Expand/collapse arrow for directories */}
       {type === "directory" && (
-        <div
-          className={`tree-item-toggle ${isExpanded ? "expanded" : ""}`}
-          onClick={handleToggle}
-          aria-label={isExpanded ? "Collapse folder" : "Expand folder"}
-        >
-          <ChevronRight size={16} />
+        <div className="tree-item-toggle" onClick={handleToggle}>
+          <ChevronRight
+            className={`tree-item-chevron ${isExpanded ? "expanded" : ""}`}
+            size={18}
+          />
         </div>
       )}
 
-      {/* Spacing for files to align with directories */}
-      {type === "file" && <div className="tree-item-indent"></div>}
-
-      {/* Selection checkbox */}
-      <input
-        type="checkbox"
-        className="tree-item-checkbox"
-        checked={type === "file" ? isSelected : (fileData ? isDirectorySelected(fileData, selectedFiles, allFiles) : false)}
-        ref={checkboxRef}
-        onChange={handleCheckboxChange}
-        disabled={isDisabled}
+      <label
+        className={`tree-item-label ${isDisabled ? "disabled" : ""}`}
         onClick={(e) => e.stopPropagation()}
-        title={isBinary ? "Binary files cannot be selected" : isSkipped ? "Skipped files cannot be selected" : ""}
-      />
+      >
+        <input
+          ref={checkboxRef}
+          type="checkbox"
+          className="tree-item-checkbox"
+          checked={isSelected}
+          onChange={handleCheckboxChange}
+          disabled={isDisabled}
+        />
+      </label>
 
-      {/* Item content (icon, name, and metadata) */}
-      <div className="tree-item-content">
-        <div className="tree-item-icon">
-          {type === "directory" ? (isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />) : <File size={16} />}
-        </div>
-
-        <div className="tree-item-name">
-          {name}
-          {/* Show path for top-level directories */}
-          {isTopLevelDirectory && (
-            <span className="tree-item-path">{path}</span>
-          )}
-        </div>
-
-        {/* Show token count for files that have it */}
-        {fileData && fileData.tokenCount > 0 && (
-          <span className="tree-item-tokens">
-            (~{fileData.tokenCount.toLocaleString()})
-          </span>
-        )}
-
-        {/* Show badge for binary files */}
-        {isBinary && (
-          <span className="tree-item-badge binary">
-            Binary
-          </span>
-        )}
-
-        {/* Show badge for skipped files */}
-        {isSkipped && !isBinary && (
-          <span className="tree-item-badge skipped">
-            Skipped
-          </span>
-        )}
-
-        {/* Show badge for excluded files */}
-        {!isDisabled && isExcludedByDefault && (
-          <span className="tree-item-badge excluded">Excluded</span>
-        )}
-        
-        {/* Add remove button for root folders */}
-        {isTopLevelDirectory && removeRootFolder && rootId && (
-          <button 
-            className="tree-item-remove-btn"
-            onClick={handleRemoveClick}
-            title="Remove this root folder"
-          >
-            <Trash size={14} />
-          </button>
+      <div className="tree-item-icon">
+        {type === "file" ? (
+          <File size={18} />
+        ) : (
+          isExpanded ? <FolderOpen size={18} /> : <Folder size={18} />
         )}
       </div>
+
+      <div className="tree-item-content">
+        <span className="tree-item-name">{name}</span>
+        {isTopLevelDirectory && rootId && (
+          <span className="tree-item-path">{path}</span>
+        )}
+      </div>
+
+      {isBinary && <span className="tree-item-badge binary">Binary</span>}
+      {isSkipped && <span className="tree-item-badge skipped">Skipped</span>}
+      {isExcludedByDefault && (
+        <span className="tree-item-badge excluded">Excluded</span>
+      )}
+      
+      {isTopLevelDirectory && rootId && removeRootFolder && (
+        <button 
+          className="tree-item-remove-btn" 
+          onClick={handleRemoveRoot}
+          title="Remove this root folder"
+        >
+          <Trash size={16} />
+        </button>
+      )}
     </div>
   );
 };

@@ -10,6 +10,13 @@ import { FolderOpen, Plus, X, Trash, Trash2 } from "lucide-react";
  */
 import * as pathUtils from "../utils/pathUtils";
 
+/**
+ * Constants for localStorage keys
+ */
+const STORAGE_KEYS = {
+  EXPANDED_NODES: "pastemax-expanded-nodes",
+};
+
 // Ensure we have the critical path utilities, with fallbacks if needed
 const {
   normalizePath = (path: string): string => path?.replace(/\\/g, '/') || path,
@@ -68,22 +75,31 @@ const Sidebar = ({
   toggleExpanded,
   processingStatus,
 }: SidebarProps) => {
-  // State for managing the file tree and UI
-  const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
-  const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(300);
+  // Use type assertions to satisfy TypeScript
+  const [fileTree, setFileTree] = useState([] as TreeNode[]);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const savedWidth = localStorage.getItem("pastemax-sidebar-width");
+    return savedWidth ? parseInt(savedWidth, 10) : 300; // Default width
+  });
   const [isResizing, setIsResizing] = useState(false);
-  const fileTreeRef = useRef(null) as { current: HTMLDivElement | null }; // Use proper type assertion
+  const sidebarRef = useRef(null as HTMLDivElement | null);
+  const resizeHandleRef = useRef(null as HTMLDivElement | null);
 
-  // Update UI based on backend processing status changes
-  useEffect(() => {
-    if (processingStatus?.status === "complete" || processingStatus?.status === "idle") {
-      // Mark tree building as complete when backend processing finishes
-      if (fileTree.length > 0 && !isTreeBuildingComplete) {
-        setIsTreeBuildingComplete(true);
-      }
-    }
-  }, [processingStatus, fileTree.length, isTreeBuildingComplete]);
+  // Build file tree when files change or when processing status changes
+  // useEffect(() => {
+  //   console.log("Building file tree...");
+    
+  //   if (processingStatus.status === "processing") {
+  //     // Don't build tree while processing
+  //     return;
+  //   }
+
+  //   // When backend processing completes, build the tree
+  //   const tree = buildFileTree(allFiles, rootFolders, expandedNodes);
+  //   setFileTree(tree);
+    
+  //   // We'll handle auto-expanding root folders in a different way
+  // }, [allFiles, rootFolders, processingStatus, expandedNodes]);
 
   // Sidebar width constraints for a good UX
   const MIN_SIDEBAR_WIDTH = 200;
@@ -108,6 +124,8 @@ const Sidebar = ({
 
     const handleResizeEnd = () => {
       setIsResizing(false);
+      // Save sidebar width to localStorage for persistence
+      localStorage.setItem("pastemax-sidebar-width", sidebarWidth.toString());
     };
 
     document.addEventListener("mousemove", handleResize);
@@ -117,18 +135,25 @@ const Sidebar = ({
       document.removeEventListener("mousemove", handleResize);
       document.removeEventListener("mouseup", handleResizeEnd);
     };
-  }, [isResizing]);
+  }, [isResizing, sidebarWidth]);
+
+  // Load saved sidebar width from localStorage
+  useEffect(() => {
+    const savedWidth = localStorage.getItem("pastemax-sidebar-width");
+    if (savedWidth) {
+      const width = parseInt(savedWidth, 10);
+      if (!isNaN(width) && width >= MIN_SIDEBAR_WIDTH && width <= MAX_SIDEBAR_WIDTH) {
+        setSidebarWidth(width);
+      }
+    }
+  }, []);
 
   // Build file tree structure from flat list of files
   useEffect(() => {
     if (allFiles.length === 0) {
       setFileTree([]);
-      setIsTreeBuildingComplete(false);
       return;
     }
-
-    // Reset the tree building completion state
-    setIsTreeBuildingComplete(false);
 
     const buildTree = () => {
       console.log("Building file tree from", allFiles.length, "files");
@@ -169,7 +194,7 @@ const Sidebar = ({
               children: [],
               isExpanded: expandedNodes[`node-${normalizedRootPath}`] !== undefined 
                 ? expandedNodes[`node-${normalizedRootPath}`] 
-                : true,
+                : true, // Default to expanded for root folders
               fileData: rootFolderItem,
               rootId: rootFolder.id
             };
@@ -233,7 +258,6 @@ const Sidebar = ({
 
         // Apply expanded state and set the tree
         setFileTree(sortedTree);
-        setIsTreeBuildingComplete(true);
         console.log("Built tree with", sortedTree.length, "root items");
       } catch (error) {
         console.error("Error building file tree:", error);
@@ -262,13 +286,11 @@ const Sidebar = ({
               return a.name.localeCompare(b.name);
             });
             
-          setFileTree(flatTree);
-          setIsTreeBuildingComplete(true);
-          console.log("Built simple flat tree with", flatTree.length, "items");
+            setFileTree(flatTree);
+            console.log("Built simple flat tree with", flatTree.length, "items");
         } catch (fallbackError) {
           console.error("Fallback tree building also failed:", fallbackError);
           setFileTree([]);
-          setIsTreeBuildingComplete(true);
         }
       }
     };
@@ -336,7 +358,7 @@ const Sidebar = ({
           fileData: file,
           isExpanded: expandedNodes[nodeId] !== undefined 
                 ? expandedNodes[nodeId] 
-                : true,
+                : parentNode.level === 0 ? true : false, // Auto-expand first level directories
           rootId: file.rootId
         };
         
@@ -473,7 +495,10 @@ const Sidebar = ({
   const visibleTree = flattenTree(filterTree(fileTree, searchTerm));
 
   return (
-    <div className="sidebar" style={{ width: `${sidebarWidth}px` }}>
+    <div 
+      className={`sidebar ${isResizing ? 'resizing' : ''}`} 
+      style={{ width: `${sidebarWidth}px` }}
+    >
       <div className="sidebar-header">
         <div className="sidebar-title">Files</div>
         {rootFolders && rootFolders.length > 0 ? (
@@ -541,7 +566,7 @@ const Sidebar = ({
       )}
 
       {/* File tree list */}
-      <div className="file-tree" ref={fileTreeRef}>
+      <div className="file-tree" ref={sidebarRef}>
         {fileTree.map((node: TreeNode) => (
           <TreeItem
             key={node.id}
@@ -557,7 +582,7 @@ const Sidebar = ({
         ))}
       </div>
 
-      <div className="sidebar-resizer" onMouseDown={handleResizeStart}></div>
+      <div className="sidebar-resizer" onMouseDown={handleResizeStart} ref={resizeHandleRef}></div>
     </div>
   );
 };

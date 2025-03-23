@@ -377,6 +377,17 @@ const App = (): JSX.Element => {
       console.log("Root folder added:", newRoot);
       
       setRootFolders((prevRoots: RootFolder[]) => {
+        // Ensure we're not duplicating roots
+        const isRootAlreadyAdded = prevRoots.some(
+          root => root.id === newRoot.id || arePathsEqual(root.path, newRoot.path)
+        );
+        
+        if (isRootAlreadyAdded) {
+          console.log("Root already exists, not adding duplicate", newRoot.path);
+          return prevRoots;
+        }
+        
+        // Add the new root to the existing roots
         const updatedRoots = [...prevRoots, newRoot];
         // Save to localStorage
         localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRoots));
@@ -414,13 +425,29 @@ const App = (): JSX.Element => {
       );
     };
     
-    // Handler for root folder error
+    // Handle root folder error
     const handleRootFolderError = (error: { error: string, path?: string, rootId?: string }) => {
       console.error("Root folder error:", error);
+      
+      // Set a detailed error message
+      let errorMessage = error.error;
+      if (error.path) {
+        errorMessage += ` (${error.path})`;
+      }
+      
+      // Update the UI with the error message
       setProcessingStatus({
         status: "error",
-        message: error.error,
+        message: errorMessage,
       });
+      
+      // Clear the error after 5 seconds
+      setTimeout(() => {
+        setProcessingStatus({
+          status: "idle",
+          message: "",
+        });
+      }, 5000);
     };
 
     // Add new handler for when all root folders are removed
@@ -645,6 +672,28 @@ const App = (): JSX.Element => {
     });
   };
 
+  // Select all non-binary, non-skipped, non-excluded files
+  const selectAllFiles = () => {
+    const selectableFiles = allFiles.filter(
+      (file: FileData) =>
+        file && file.path && 
+        !file.isBinary && !file.isSkipped && 
+        !file.excludedByDefault && !file.isDirectory
+    );
+    
+    const filePaths = selectableFiles.map((file: FileData) => file.path);
+    setSelectedFiles(filePaths);
+    
+    // Update localStorage
+    localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify(filePaths));
+  };
+
+  // Deselect all files
+  const deselectAllFiles = () => {
+    setSelectedFiles([]);
+    localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify([]));
+  };
+
   // Toggle folder selection (select/deselect all files in folder)
   const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
     console.log('toggleFolderSelection called with:', { folderPath, isSelected });
@@ -652,6 +701,11 @@ const App = (): JSX.Element => {
     // Normalize the folder path for cross-platform compatibility
     const normalizedFolderPath = normalizePath(folderPath);
     console.log('Normalized folder path:', normalizedFolderPath);
+    
+    // Find the rootId for this folder path (if it's a specific root folder)
+    const folderRootId = allFiles.find((file: FileData) => 
+      file.path && arePathsEqual(file.path, normalizedFolderPath)
+    )?.rootId;
     
     // Function to check if a file is in the given folder or its subfolders
     const isFileInFolder = (filePath: string, folderPath: string): boolean => {
@@ -666,40 +720,39 @@ const App = (): JSX.Element => {
     
     // Filter all files to get only those in this folder (and subfolders) that are selectable
     const filesInFolder = allFiles.filter((file: FileData) => {
+      // Only consider files in the same root as the folder (if applicable)
+      if (folderRootId && file.rootId !== folderRootId) {
+        return false;
+      }
+      
       const inFolder = isFileInFolder(file.path, normalizedFolderPath);
       const selectable = !file.isBinary && !file.isSkipped && !file.excludedByDefault && !file.isDirectory;
-      return selectable && inFolder;
+      return inFolder && selectable;
     });
     
-    console.log('Found', filesInFolder.length, 'selectable files in folder and subfolders');
+    console.log(`Found ${filesInFolder.length} selectable files in folder ${normalizedFolderPath}`);
     
-    // If no selectable files were found, do nothing
-    if (filesInFolder.length === 0) {
-      console.log('No selectable files found in folder, nothing to do');
-      return;
-    }
+    // Extract just the paths of these files
+    const folderFilePaths = filesInFolder.map((file: FileData) => file.path);
     
-    // Extract just the paths from the files and normalize them
-    const folderFilePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
-    console.log('File paths in folder:', folderFilePaths);
-    
-    if (isSelected) {
-      // Adding files - create a new Set with all existing + new files
-      setSelectedFiles((prev: string[]) => {
-        const existingSelection = new Set(prev.map(normalizePath));
-        folderFilePaths.forEach((path: string) => existingSelection.add(path));
-        const newSelection = Array.from(existingSelection);
-        console.log(`Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`);
-        return newSelection;
-      });
-    } else {
-      // Removing files - filter out any file that's in our folder or subfolders
-      setSelectedFiles((prev: string[]) => {
-        const newSelection = prev.filter((path: string) => !isFileInFolder(path, normalizedFolderPath));
-        console.log(`Removed ${prev.length - newSelection.length} files from selection, total now: ${newSelection.length}`);
-        return newSelection;
-      });
-    }
+    setSelectedFiles((prev: string[]) => {
+      let updatedSelection: string[];
+      
+      if (isSelected) {
+        // Add all files that aren't already selected
+        updatedSelection = [...new Set([...prev, ...folderFilePaths])];
+      } else {
+        // Remove all files from the folder
+        updatedSelection = prev.filter((path: string) => 
+          !folderFilePaths.includes(path)
+        );
+      }
+      
+      // Update localStorage
+      localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify(updatedSelection));
+      
+      return updatedSelection;
+    });
   };
 
   // Handle sort change
@@ -785,33 +838,6 @@ const App = (): JSX.Element => {
     });
     
     return output;
-  };
-
-  // Handle select all files
-  const selectAllFiles = () => {
-    const selectablePaths = displayedFiles
-      .filter((file: FileData) => !file.isBinary && !file.isSkipped && !file.excludedByDefault && !file.isDirectory)
-      .map((file: FileData) => file.path);
-
-    setSelectedFiles((prev: string[]) => {
-      const newSelection = [...prev];
-      selectablePaths.forEach((path: string) => {
-        if (!newSelection.includes(path)) {
-          newSelection.push(path);
-        }
-      });
-      return newSelection;
-    });
-  };
-
-  // Handle deselect all files
-  const deselectAllFiles = () => {
-    const displayedPaths = displayedFiles.map((file: FileData) => file.path);
-    setSelectedFiles((prev: string[]) =>
-      prev.filter((path: string) => 
-        !displayedPaths.some((displayedPath: string) => arePathsEqual(displayedPath, path))
-      )
-    );
   };
 
   // Sort options for the dropdown

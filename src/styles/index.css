@@ -1613,3 +1613,46 @@ input[type="text"].search-input:focus {
  * Various utility classes for common style patterns
  * Can be combined with component classes for specific effects
  */
+
+/* Enhance the sidebar resizer for better visibility and usability */
+.sidebar-resizer {
+  width: 4px;
+  height: 100%;
+  background-color: var(--border-color);
+  cursor: col-resize;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-resizer:hover, .sidebar-resizer:active {
+  background-color: var(--accent-blue);
+  width: 4px;
+}
+
+/* Add a visual indicator on hover */
+.sidebar-resizer:hover::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 100px;
+  background-color: var(--accent-blue);
+}
+
+/* Add styling for when the sidebar is being resized */
+.sidebar.resizing {
+  transition: none; /* Disable transition during resize for smoother experience */
+  user-select: none;
+}
+
+/* Ensure the main content area resizes properly */
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
