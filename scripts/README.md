@@ -30,6 +30,36 @@ npm run test-build:win
 npm run test-build:linux
 ```
 
+### `test-gitignore.js` and `test-gitignore-crossplatform.js`
+
+Tests the gitignore functionality to ensure files are excluded correctly according to gitignore patterns.
+
+Usage:
+
+```bash
+# Standard gitignore test
+npm run test-gitignore
+
+# Cross-platform gitignore test (for Windows, macOS, and Linux)
+npm run test-gitignore:cross
+```
+
+### `test-path-utils.js`
+
+Tests the shared path utilities to ensure they work correctly in both development and production environments. 
+This comprehensive test verifies:
+
+1. Path normalization and handling across different platforms
+2. Path joining, comparison, and relative path calculations
+3. The fallback mechanism when compiled TypeScript files are not available
+4. Error handling for edge cases
+
+Usage:
+
+```bash
+npm run test-path-utils
+```
+
 ## Debugging GitHub Actions
 
 If you're having issues with GitHub Actions not building the binaries correctly, use the debug workflow:

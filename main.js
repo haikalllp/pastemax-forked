@@ -4,6 +4,9 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto"); // Added for CSP nonce generation
 
+// Import centralized path utilities from shared adapter
+const pathUtils = require("./shared/pathUtils");
+
 // Global variables for directory loading control
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
@@ -23,104 +26,84 @@ let currentTheme = 'light';
  * This ensures consistent path formatting between main and renderer processes
  * Also handles UNC paths on Windows
  */
-function normalizePath(filePath) {
-  if (!filePath) return filePath;
-
-  // Handle Windows UNC paths
-  if (process.platform === 'win32' && filePath.startsWith('\\\\')) {
-    // Preserve the UNC path format but normalize separators
-    return '\\\\' + filePath.slice(2).replace(/\\/g, '/');
-  }
-
-  return filePath.replace(/\\/g, '/');
-}
-
-/**
- * Makes a path relative by removing drive letters and leading slashes
- * This is particularly useful for gitignore pattern matching
- * 
- * @param {string} filePath - The file path to make relative
- * @returns {string} - The path without drive letter and leading slashes
- */
-function makeRelativePath(filePath) {
-  if (!filePath) return filePath;
-  
-  // Normalize first
-  let normalizedPath = normalizePath(filePath);
-  
-  // Remove drive letter (e.g., C:/) if present (Windows-specific)
-  normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
-  
-  // Remove leading slash if present
-  normalizedPath = normalizedPath.replace(/^\//, '');
-  
-  return normalizedPath;
-}
-
-/**
- * Get the platform-specific path separator
- */
-function getPathSeparator() {
-  return path.sep;
-}
-
-/**
- * Ensures a path is absolute and normalized for the current platform
- * @param {string} inputPath - The path to normalize
- * @returns {string} - Normalized absolute path
- */
-function ensureAbsolutePath(inputPath) {
-  if (!path.isAbsolute(inputPath)) {
-    inputPath = path.resolve(inputPath);
-  }
-  return normalizePath(inputPath);
-}
-
-/**
- * Safely joins paths across different platforms
- * @param {...string} paths - Path segments to join
- * @returns {string} - Normalized joined path
- */
-function safePathJoin(...paths) {
-  const joined = path.join(...paths);
-  return normalizePath(joined);
-}
-
-/**
- * Safely calculates relative path between two paths
- * Handles different OS path formats and edge cases
- * @param {string} from - Base path
- * @param {string} to - Target path
- * @returns {string} - Normalized relative path
- */
-function safeRelativePath(from, to) {
-  // Normalize both paths to use the same separator format
-  from = normalizePath(from);
-  to = normalizePath(to);
-  
-  // Handle Windows drive letter case-insensitivity
-  if (process.platform === 'win32') {
-    from = from.toLowerCase();
-    to = to.toLowerCase();
-  }
-  
-  let relativePath = path.relative(from, to);
-  return normalizePath(relativePath);
-}
-
-/**
- * Checks if a path is a valid path for the current OS
- * @param {string} pathToCheck - Path to validate
- * @returns {boolean} - True if path is valid
- */
-function isValidPath(pathToCheck) {
-  try {
-    path.parse(pathToCheck);
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
+// function normalizePath(filePath) {
+//   if (!filePath) return filePath;
+// 
+//   // Handle Windows UNC paths
+//   if (process.platform === 'win32' && filePath.startsWith('\\\\')) {
+//     // Preserve the UNC path format but normalize separators
+//     return '\\\\' + filePath.slice(2).replace(/\\/g, '/');
+//   }
+// 
+//   return filePath.replace(/\\/g, '/');
+// }
+// 
+// /**
+//  * Makes a path relative by removing drive letters and leading slashes
+//  * This is particularly useful for gitignore pattern matching
+//  * 
+//  * @param {string} filePath - The file path to make relative
+//  * @returns {string} - The path without drive letter and leading slashes
+//  */
+// function makeRelativePath(filePath) {
+//   if (!filePath) return filePath;
+//   
+//   // Normalize first
+//   let normalizedPath = normalizePath(filePath);
+//   
+//   // Remove drive letter (e.g., C:/) if present (Windows-specific)
+//   normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
+//   
+//   // Remove leading slash if present
+//   normalizedPath = normalizedPath.replace(/^\//, '');
+//   
+//   return normalizedPath;
+// }
+// 
+// /**
+//  * Get the platform-specific path separator
+//  */
+// function getPathSeparator() {
+//   return path.sep;
+// }
+// 
+// /**
+//  * Ensures a path is absolute and normalized for the current platform
+//  * @param {string} inputPath - The path to normalize
+//  * @returns {string} - Normalized absolute path
+//  */
+// function ensureAbsolutePath(inputPath) {
+//   if (!path.isAbsolute(inputPath)) {
+//     inputPath = path.resolve(inputPath);
+//   }
+//   return normalizePath(inputPath);
+// }
+// 
+// /**
+//  * Safely joins paths across different platforms
+//  * @param {...string} paths - Path segments to join
+//  * @returns {string} - Normalized joined path
+//  */
+// function safePathJoin(...paths) {
+//   const joined = path.join(...paths);
+//   return normalizePath(joined);
+// }
+// 
+// /**
+//  * Safely calculates relative path between two paths
+//  * Handles different OS path formats and edge cases
+//  * @param {string} from - Base path
+//  * @param {string} to - Target path
+//  * @returns {string} - Normalized relative path
+//  */
+// function safeRelativePath(from, to) {
+//   // Normalize both paths to use the same separator format
+//   from = normalizePath(from);
+//   to = normalizePath(to);
+//   
+//   const relativePath = path.relative(from, to);
+//   return normalizePath(relativePath);
+// }
 
 // Add handling for the 'ignore' module
 let ignore;
@@ -510,8 +493,8 @@ function loadGitignore(rootDir) {
   
   try {
     // Ensure root directory path is absolute and normalized
-    rootDir = ensureAbsolutePath(rootDir);
-    const gitignorePath = safePathJoin(rootDir, ".gitignore");
+    rootDir = pathUtils.ensureAbsolutePath(rootDir);
+    const gitignorePath = pathUtils.safePathJoin(rootDir, ".gitignore");
 
     if (fs.existsSync(gitignorePath)) {
       try {
@@ -522,7 +505,7 @@ function loadGitignore(rootDir) {
           .map(pattern => pattern.trim())
           .filter(pattern => pattern && !pattern.startsWith('#'))
           // Ensure forward slashes in patterns for cross-platform compatibility
-          .map(pattern => normalizePath(pattern));
+          .map(pattern => pathUtils.normalizePath(pattern));
 
         console.log(`Loaded ${normalizedPatterns.length} patterns from .gitignore`);
         ig.add(normalizedPatterns);
@@ -553,7 +536,7 @@ function loadGitignore(rootDir) {
 
     // Normalize and add the excludedFiles patterns
     if (Array.isArray(excludedFiles)) {
-      const normalizedExcludedFiles = excludedFiles.map(pattern => normalizePath(pattern));
+      const normalizedExcludedFiles = excludedFiles.map(pattern => pathUtils.normalizePath(pattern));
       ig.add(normalizedExcludedFiles);
       console.log(`Added ${normalizedExcludedFiles.length} patterns from excluded-files.js`);
     } else {
@@ -573,7 +556,7 @@ function loadGitignore(rootDir) {
     
     try {
       // Make path relative using our utility function
-      const relativePath = makeRelativePath(path);
+      const relativePath = pathUtils.makeRelativePath(path);
       
       return originalIgnores.call(ig, relativePath);
     } catch (err) {
@@ -630,8 +613,8 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   if (!isLoadingDirectory) return [];
   
   // Ensure absolute and normalized paths
-  dir = ensureAbsolutePath(dir);
-  rootDir = ensureAbsolutePath(rootDir || dir);
+  dir = pathUtils.ensureAbsolutePath(dir);
+  rootDir = pathUtils.ensureAbsolutePath(rootDir || dir);
   ignoreFilter = ignoreFilter || loadGitignore(rootDir);
 
   let results = [];
@@ -642,11 +625,11 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   if (isRoot) {
     try {
       const stats = await fs.promises.stat(dir);
-      const rootName = basename(dir); // Get the folder name, not the full path
+      const rootName = pathUtils.basename(dir); // Get the folder name, not the full path
       
       const rootEntry = {
         name: rootName,
-        path: normalizePath(dir),
+        path: pathUtils.normalizePath(dir),
         content: "",
         tokenCount: 0,
         size: stats.size,
@@ -674,13 +657,13 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
     for (const dirent of directories) {
       if (!isLoadingDirectory) return results;
 
-      const fullPath = safePathJoin(dir, dirent.name);
+      const fullPath = pathUtils.safePathJoin(dir, dirent.name);
       // Calculate relative path safely
-      const relativePath = safeRelativePath(rootDir, fullPath);
+      const relativePath = pathUtils.safeRelativePath(rootDir, fullPath);
 
       // Skip PasteMax app directories and invalid paths
       if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
-          !isValidPath(relativePath) || relativePath.startsWith('..')) {
+          !pathUtils.isValidPath(relativePath) || relativePath.startsWith('..')) {
         console.log('Skipping directory:', fullPath);
         continue;
       }
@@ -690,7 +673,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         const dirStats = await fs.promises.stat(fullPath);
         results.push({
           name: dirent.name,
-          path: normalizePath(fullPath),
+          path: pathUtils.normalizePath(fullPath),
           relativePath: relativePath,
           tokenCount: 0,
           size: dirStats.size || 0,
@@ -705,7 +688,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         // Still add the directory entry with default values if we can't stat it
         results.push({
           name: dirent.name,
-          path: normalizePath(fullPath),
+          path: pathUtils.normalizePath(fullPath),
           relativePath: relativePath,
           tokenCount: 0,
           size: 0,
@@ -750,13 +733,13 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
       const chunkPromises = chunk.map(async (dirent) => {
         if (!isLoadingDirectory) return null;
 
-        const fullPath = safePathJoin(dir, dirent.name);
+        const fullPath = pathUtils.safePathJoin(dir, dirent.name);
         // Calculate relative path safely
-        const relativePath = safeRelativePath(rootDir, fullPath);
+        const relativePath = pathUtils.safeRelativePath(rootDir, fullPath);
 
         // Skip PasteMax app files and invalid paths
         if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
-            !isValidPath(relativePath) || relativePath.startsWith('..')) {
+            !pathUtils.isValidPath(relativePath) || relativePath.startsWith('..')) {
           console.log('Skipping file:', fullPath);
           return null;
         }
@@ -786,7 +769,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           if (stats.size > MAX_FILE_SIZE) {
             return {
               name: dirent.name,
-              path: normalizePath(fullPath),
+              path: pathUtils.normalizePath(fullPath),
               relativePath: relativePath,
               tokenCount: 0,
               size: stats.size,
@@ -801,7 +784,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           if (isBinaryFile(fullPath)) {
             return {
               name: dirent.name,
-              path: normalizePath(fullPath),
+              path: pathUtils.normalizePath(fullPath),
               relativePath: relativePath,
               tokenCount: 0,
               size: stats.size,
@@ -818,7 +801,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           
           return {
             name: dirent.name,
-            path: normalizePath(fullPath),
+            path: pathUtils.normalizePath(fullPath),
             relativePath: relativePath,
             content: fileContent,
             tokenCount: countTokens(fileContent),
@@ -831,7 +814,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           console.error(`Error reading file ${fullPath}:`, err);
           return {
             name: dirent.name,
-            path: normalizePath(fullPath),
+            path: pathUtils.normalizePath(fullPath),
             relativePath: relativePath,
             tokenCount: 0,
             size: 0,
@@ -867,24 +850,12 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   return results;
 }
 
-// Helper function to get basename
-function basename(path) {
-  if (!path) return "";
-  const normalizedPath = normalizePath(path);
-  const parts = normalizedPath.split('/');
-  // Get the last non-empty part
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i]) return parts[i];
-  }
-  return "";
-}
-
 // Handle file list request
 ipcMain.on("request-file-list", async (event, folderPath) => {
   try {
     console.log("Processing file list for folder:", folderPath);
     console.log("OS platform:", os.platform());
-    console.log("Path separator:", getPathSeparator());
+    console.log("Path separator:", pathUtils.getPathSeparator());
 
     // Set the loading flag to true
     isLoadingDirectory = true;
@@ -928,7 +899,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         // Process the files to ensure they're serializable
         const serializableFiles = files.map((file) => {
           // Normalize the path to use forward slashes consistently
-          const normalizedPath = normalizePath(file.path);
+          const normalizedPath = pathUtils.normalizePath(file.path);
           
           // Create a clean file object
           return {
@@ -945,7 +916,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             isSkipped: Boolean(file.isSkipped),
             error: file.error ? String(file.error) : null,
             fileType: file.fileType ? String(file.fileType) : null,
-            excludedByDefault: shouldExcludeByDefault(normalizedPath, normalizePath(folderPath)), // Also normalize folder path
+            excludedByDefault: shouldExcludeByDefault(normalizedPath, pathUtils.normalizePath(folderPath)), // Also normalize folder path
             isDirectory: Boolean(file.isDirectory)
           };
         });
@@ -1020,8 +991,8 @@ function shouldExcludeByDefault(filePath, rootDir) {
 
   try {
     // Ensure both paths are normalized for consistent handling across platforms
-    filePath = normalizePath(filePath);
-    rootDir = normalizePath(rootDir);
+    filePath = pathUtils.normalizePath(filePath);
+    rootDir = pathUtils.normalizePath(rootDir);
 
     // Handle Windows drive letter case sensitivity
     if (process.platform === 'win32') {
@@ -1044,7 +1015,7 @@ function shouldExcludeByDefault(filePath, rootDir) {
     // Use path.relative for proper cross-platform path handling
     let relativePath = path.relative(rootDir, filePath);
     // Then normalize to forward slashes and make it a proper relative path
-    const relativePathNormalized = makeRelativePath(relativePath);
+    const relativePathNormalized = pathUtils.makeRelativePath(relativePath);
     
     // Handle empty relative paths (root directory case)
     if (!relativePathNormalized || relativePathNormalized === '') {

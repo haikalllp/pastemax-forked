@@ -10,6 +10,9 @@ const path = require('path');
 const ignore = require('ignore');
 const os = require('os');
 
+// Import centralized path utilities
+const { normalizePath, makeRelativePath } = require('../shared/pathUtils');
+
 // Simulated gitignore patterns commonly found in projects
 const commonGitignorePatterns = [
   '.DS_Store',
@@ -31,26 +34,26 @@ const commonGitignorePatterns = [
 ];
 
 // Function to normalize paths - converts backslashes to forward slashes
-function normalizePath(path) {
-  if (!path) return path;
-  return path.replace(/\\/g, '/');
-}
+// function normalizePath(path) {
+//   if (!path) return path;
+//   return path.replace(/\\/g, '/');
+// }
 
 // Function to make paths relative by removing drive letters and leading slashes
-function makeRelativePath(path) {
-  if (!path) return path;
-  
-  // Normalize first
-  let normalizedPath = normalizePath(path);
-  
-  // Remove drive letter (e.g., C:/) if present
-  normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
-  
-  // Remove leading slash if present
-  normalizedPath = normalizedPath.replace(/^\//, '');
-  
-  return normalizedPath;
-}
+// function makeRelativePath(path) {
+//   if (!path) return path;
+//   
+//   // Normalize first
+//   let normalizedPath = normalizePath(path);
+//   
+//   // Remove drive letter (e.g., C:/) if present
+//   normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
+//   
+//   // Remove leading slash if present
+//   normalizedPath = normalizedPath.replace(/^\//, '');
+//   
+//   return normalizedPath;
+// }
 
 // Detect current platform
 console.log(`Current platform: ${os.platform()}`);

@@ -5,9 +5,10 @@ const path = require("path");
 
 async function main() {
   try {
-    console.log("📦 Building React app with Vite...");
-    execSync("npm run build", { stdio: "inherit" });
-    console.log("✅ React build completed successfully!");
+    // Now using the unified build:app script which already includes build:utils
+    console.log("📦 Building React app and compiling utilities...");
+    execSync("npm run build:app", { stdio: "inherit" });
+    console.log("✅ Build completed successfully!");
 
     // Fix the paths in index.html for Electron compatibility
     const indexHtmlPath = path.join(__dirname, "dist", "index.html");

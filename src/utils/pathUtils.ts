@@ -1,7 +1,29 @@
 /**
- * A collection of path utilities that work in both browser and desktop environments.
- * These functions handle the tricky bits of working with file paths across different
- * operating systems (Windows, Mac, Linux) so you don't have to worry about it.
+ * @file pathUtils.ts
+ * @description Centralized path utilities for cross-platform path handling
+ * 
+ * This file serves as the single source of truth for all path-related operations
+ * across both main and renderer processes. It provides a consistent API for 
+ * normalizing paths, comparing paths, extracting path components, and other
+ * path-related operations.
+ * 
+ * Usage in renderer process:
+ * ```typescript
+ * import { normalizePath, basename } from "../utils/pathUtils";
+ * 
+ * const normalizedPath = normalizePath(filePath);
+ * const fileName = basename(filePath);
+ * ```
+ * 
+ * Usage in main process (via shared adapter):
+ * ```javascript
+ * const { normalizePath, basename } = require("./shared/pathUtils");
+ * 
+ * const normalizedPath = normalizePath(filePath);
+ * const fileName = basename(filePath);
+ * ```
+ * 
+ * @module pathUtils
  */
 
 /**
@@ -10,13 +32,20 @@
 
 /**
  * Normalizes a file path to use forward slashes regardless of operating system
- * This helps with path comparison across different platforms
+ * This helps with path comparison across different platforms.
+ * Also handles UNC paths on Windows.
  * 
  * @param filePath The file path to normalize
  * @returns The normalized path with forward slashes
  */
 export function normalizePath(filePath: string): string {
   if (!filePath) return filePath;
+  
+  // Handle Windows UNC paths - special case for network paths
+  if (isWindows() && filePath.startsWith('\\\\')) {
+    // Preserve the UNC path format but normalize separators
+    return '\\\\' + filePath.slice(2).replace(/\\/g, '/');
+  }
   
   // Replace backslashes with forward slashes
   return filePath.replace(/\\/g, '/');
@@ -60,6 +89,17 @@ export function detectOS(): 'windows' | 'mac' | 'linux' | 'unknown' {
     } else if (platform.includes('linux')) {
       return 'linux';
     }
+  } else if (typeof process !== 'undefined' && process.platform) {
+    // Node.js environment
+    const platform = process.platform;
+    
+    if (platform === 'win32') {
+      return 'windows';
+    } else if (platform === 'darwin') {
+      return 'mac';
+    } else if (platform === 'linux') {
+      return 'linux';
+    }
   }
   
   return 'unknown';
@@ -71,6 +111,96 @@ export function detectOS(): 'windows' | 'mac' | 'linux' | 'unknown' {
  */
 export function isWindows(): boolean {
   return detectOS() === 'windows';
+}
+
+/**
+ * Get the platform-specific path separator
+ * 
+ * @returns The path separator for the current OS (\ for Windows, / for others)
+ */
+export function getPathSeparator(): string {
+  return isWindows() ? '\\' : '/';
+}
+
+/**
+ * Ensures a path is absolute and normalized for the current platform
+ * 
+ * @param inputPath The path to normalize
+ * @returns Normalized absolute path
+ */
+export function ensureAbsolutePath(inputPath: string): string {
+  if (typeof require !== 'undefined') {
+    // Only available in Node.js environment
+    try {
+      const path = require('path');
+      if (!path.isAbsolute(inputPath)) {
+        inputPath = path.resolve(inputPath);
+      }
+    } catch (e) {
+      console.warn('path module not available, cannot ensure absolute path');
+    }
+  }
+  
+  return normalizePath(inputPath);
+}
+
+/**
+ * Safely joins paths across different platforms
+ * 
+ * @param paths Path segments to join
+ * @returns Normalized joined path
+ */
+export function safePathJoin(...paths: string[]): string {
+  if (typeof require !== 'undefined') {
+    // Only available in Node.js environment
+    try {
+      const path = require('path');
+      const joined = path.join(...paths);
+      return normalizePath(joined);
+    } catch (e) {
+      // Fallback if path module is not available
+      console.warn('path module not available, using fallback join');
+    }
+  }
+  
+  // Fallback implementation using our own join function
+  return join(...paths);
+}
+
+/**
+ * Safely calculates relative path between two paths
+ * Handles different OS path formats and edge cases
+ * 
+ * @param from Base path
+ * @param to Target path
+ * @returns Normalized relative path
+ */
+export function safeRelativePath(from: string, to: string): string {
+  // Normalize both paths to use the same separator format
+  from = normalizePath(from);
+  to = normalizePath(to);
+  
+  if (typeof require !== 'undefined') {
+    // Only available in Node.js environment
+    try {
+      const path = require('path');
+      const relativePath = path.relative(from, to);
+      return normalizePath(relativePath);
+    } catch (e) {
+      // Fallback if path module is not available
+      console.warn('path module not available, using basic relative path');
+    }
+  }
+  
+  // Basic implementation for browser environments
+  // This is a simplified version that works for simple cases
+  // For complex paths, Node's path.relative should be used
+  if (to.startsWith(from)) {
+    return to.substring(from.length).replace(/^\//, '');
+  }
+  
+  // If paths don't share a common prefix, return the full target path
+  return to;
 }
 
 /**
@@ -297,4 +427,29 @@ export function generateAsciiFileTree(files: { path: string }[], rootPath: strin
   };
   
   return generateAscii(root);
+}
+
+/**
+ * Checks if a path is a valid path for the current OS
+ * @param path The path to validate
+ * @returns True if path is valid
+ */
+export function isValidPath(path: string): boolean {
+  try {
+    if (typeof require !== 'undefined') {
+      // Node.js environment
+      try {
+        const pathModule = require('path');
+        pathModule.parse(path);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    
+    // Basic validation for browser environment
+    return typeof path === 'string' && path.length > 0 && !path.includes('\0');
+  } catch (err) {
+    return false;
+  }
 }

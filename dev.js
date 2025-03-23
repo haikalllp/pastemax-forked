@@ -10,10 +10,19 @@ try {
   process.exit(1);
 }
 
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const { platform } = require("os");
 
 console.log("🚀 Starting development environment...");
+
+// Compile utilities first
+try {
+  console.log("📦 Compiling utility functions...");
+  execSync("npm run build:utils", { stdio: "inherit" });
+  console.log("✅ Utilities compiled successfully!");
+} catch (err) {
+  console.warn("⚠️ Utility compilation failed, will use fallback implementation:", err.message);
+}
 
 // Set environment variable for development mode
 process.env.NODE_ENV = "development";
