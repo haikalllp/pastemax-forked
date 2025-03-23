@@ -32,7 +32,8 @@ const {
   binaryExtensions, 
   skipDirectories,
   defaultIgnorePatterns,
-  excludedRegexPatterns
+  excludedRegexPatterns,
+  normalizePath // Import the normalizePath function for consistent use
 } = require("./excluded-files");
 
 // List of directories that should be completely skipped during traversal
@@ -44,23 +45,6 @@ const SKIP_DIRS = skipDirectories;
  */
 
 /**
- * Normalize file paths to use forward slashes regardless of OS
- * This ensures consistent path formatting between main and renderer processes
- * Also handles UNC paths on Windows
- */
-function normalizePath(filePath) {
-  if (!filePath) return filePath;
-
-  // Handle Windows UNC paths
-  if (process.platform === 'win32' && filePath.startsWith('\\\\')) {
-    // Preserve the UNC path format but normalize separators
-    return '\\\\' + filePath.slice(2).replace(/\\/g, '/');
-  }
-
-  return filePath.replace(/\\/g, '/');
-}
-
-/**
  * Makes a path relative by removing drive letters and leading slashes
  * This is particularly useful for gitignore pattern matching
  * 
@@ -70,7 +54,7 @@ function normalizePath(filePath) {
 function makeRelativePath(filePath) {
   if (!filePath) return filePath;
   
-  // Normalize first
+  // Normalize first using the imported function
   let normalizedPath = normalizePath(filePath);
   
   // Remove drive letter (e.g., C:/) if present (Windows-specific)

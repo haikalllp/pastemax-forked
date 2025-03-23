@@ -2,6 +2,15 @@
 // Users can still manually select these files if needed
 // Paths include glob patterns and are normalized for cross-platform compatibility
 
+/**
+ * Helper function to normalize a path for cross-platform compatibility
+ * Ensures consistent forward slashes and proper pattern formatting
+ */
+function normalizePath(path) {
+  // Convert backslashes to forward slashes for cross-platform compatibility
+  return path.replace(/\\/g, '/');
+}
+
 // Basic categories for organization
 const CATEGORIES = {
   NODE: 'Node/NPM/Yarn',
@@ -171,7 +180,7 @@ const BINARY_EXTENSIONS = [
   ".gif",
   ".bmp",
   ".tiff",
-  ".ico",
+  ".ico", ".icns",
   ".webp",
 
   // Documents
@@ -187,6 +196,7 @@ const BINARY_EXTENSIONS = [
 ];
 
 // Common directories that should be skipped during traversal for performance
+// These are used in readFilesRecursively to avoid traversing these directories
 const SKIP_DIRECTORIES = [
   'node_modules',
   '.git',
@@ -210,6 +220,7 @@ const SKIP_DIRECTORIES = [
 ];
 
 // Create regex patterns for quick checks
+// These patterns are used for fast exclusion and are case-insensitive for cross-platform compatibility
 const EXCLUDED_REGEX_PATTERNS = [
   // Node modules
   /node_modules\//i,
@@ -253,5 +264,8 @@ module.exports = {
 
   // Export categories and patterns separately for potential selective usage
   ignoreCategories: CATEGORIES,
-  patternsByCategory: CORE_PATTERNS
+  patternsByCategory: CORE_PATTERNS,
+  
+  // Export helper function for path normalization
+  normalizePath
 };
