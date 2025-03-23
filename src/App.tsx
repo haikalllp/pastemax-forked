@@ -694,6 +694,7 @@ const App = (): JSX.Element => {
               deselectAllFiles={deselectAllFiles}
               expandedNodes={expandedNodes}
               toggleExpanded={toggleExpanded}
+              processingStatus={processingStatus}
             />
             <div className="content-area">
               <div className="content-header">

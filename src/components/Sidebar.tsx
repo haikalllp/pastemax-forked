@@ -59,13 +59,23 @@ const Sidebar = ({
   deselectAllFiles,
   expandedNodes,
   toggleExpanded,
+  processingStatus,
 }: Omit<SidebarProps, 'openFolder'>) => {
   // State for managing the file tree and UI
   const [fileTree, setFileTree] = useState(() => [] as TreeNode[]);
   const [isTreeBuildingComplete, setIsTreeBuildingComplete] = useState(false);
-  const [treeLoadingMessage, setTreeLoadingMessage] = useState("Building file tree...");
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+
+  // Update UI based on backend processing status changes
+  useEffect(() => {
+    if (processingStatus?.status === "complete" || processingStatus?.status === "idle") {
+      // Mark tree building as complete when backend processing finishes
+      if (fileTree.length > 0 && !isTreeBuildingComplete) {
+        setIsTreeBuildingComplete(true);
+      }
+    }
+  }, [processingStatus, fileTree.length, isTreeBuildingComplete]);
 
   // Sidebar width constraints for a good UX
   const MIN_SIDEBAR_WIDTH = 200;
@@ -109,9 +119,8 @@ const Sidebar = ({
       return;
     }
 
-    // Reset the loading state when starting to build a new tree
+    // Reset the tree building completion state
     setIsTreeBuildingComplete(false);
-    setTreeLoadingMessage("Building file tree...");
 
     const buildTree = () => {
       console.log("Building file tree from", allFiles.length, "files");
@@ -135,7 +144,6 @@ const Sidebar = ({
           return;
         }
         
-        setTreeLoadingMessage("Finding root folder...");
         const rootFolderItem = allFiles.find(file => 
           file && file.path && file.isDirectory && arePathsEqual(normalizePath(file.path), normalizedSelectedFolder)
         );
@@ -159,7 +167,6 @@ const Sidebar = ({
         
         if (rootFolderItem) {
           // If we found a root folder item, use it as the top-level node
-          setTreeLoadingMessage("Creating root node...");
           const rootNode: TreeNode = {
             id: `node-${normalizedSelectedFolder}`,
             name: rootFolderItem.name || basename(normalizedSelectedFolder),
@@ -167,27 +174,21 @@ const Sidebar = ({
             type: "directory",
             level: 0,
             children: [],
-            isExpanded: expandedNodes[`node-${normalizedSelectedFolder}`] !== false,
+            isExpanded: true, // Default expanded state, will be updated in the next effect
             fileData: rootFolderItem
           };
           
           // Then build the rest of the tree under this root
-          setTreeLoadingMessage("Processing child folders and files...");
           buildChildrenTree(rootNode, allFiles, normalizedSelectedFolder);
           rootTree = [rootNode];
           console.log("Built tree with root node:", rootNode.name);
         } else {
           // If no root folder was found, build the tree from the files directly
           console.log("No root folder item found, building from direct file list");
-          setTreeLoadingMessage("Organizing files into tree structure...");
           const fileMap: Record<string, any> = {};
           
           // First pass: create directories and files
           allFiles.forEach((file, index) => {
-            if (index % 100 === 0) {
-              setTreeLoadingMessage(`Processing files... ${Math.round((index / allFiles.length) * 100)}%`);
-            }
-            
             if (!file.path) {
               console.log("Skipping file with no path");
               return;
@@ -261,13 +262,11 @@ const Sidebar = ({
           });
           
           // Convert to TreeNode array
-          setTreeLoadingMessage("Converting tree map to nodes...");
           rootTree = convertToTreeNodes(fileMap);
           console.log("Built tree from fileMap, found nodes:", rootTree.length);
         }
 
         // Sort the top level (directories first, then by name)
-        setTreeLoadingMessage("Sorting tree nodes...");
         const sortedTree = rootTree.sort((a, b) => {
           if (a.type === "directory" && b.type === "file") return -1;
           if (a.type === "file" && b.type === "directory") return 1;
@@ -282,24 +281,22 @@ const Sidebar = ({
           return a.name.localeCompare(b.name);
         });
 
+        // Always set the tree regardless of processing state
         setFileTree(sortedTree);
         setIsTreeBuildingComplete(true);
+        
         console.log("Tree building complete, nodes:", sortedTree.length);
       } catch (err) {
         console.error("Error building file tree:", err);
         // On error, try to build a simple flat tree as a fallback
         try {
           console.log("Attempting to build a simple flat tree as fallback");
-          setTreeLoadingMessage("Building simplified view (fallback mode)...");
           const flatTree = allFiles
             .filter(file => 
               !arePathsEqual(normalizePath(file.path), selectedFolder ? normalizePath(selectedFolder) : '') && 
               !file.excludedByDefault // Filter out excluded files
             )
-            .map((file, index) => {
-              if (index % 100 === 0) {
-                setTreeLoadingMessage(`Building simplified view... ${Math.round((index / allFiles.length) * 100)}%`);
-              }
+            .map((file) => {
               return {
                 id: `node-${file.path}`,
                 name: file.name,
@@ -324,7 +321,6 @@ const Sidebar = ({
           console.error("Fallback tree building also failed:", fallbackError);
           setFileTree([]);
           setIsTreeBuildingComplete(true);
-          setTreeLoadingMessage("Error building file tree");
         }
       }
     };
@@ -374,10 +370,6 @@ const Sidebar = ({
       
       // Create tree nodes for children
       parentNode.children = sortedChildren.map((file: any, index: number) => {
-        if (index % 50 === 0 && sortedChildren.length > 100) {
-          setTreeLoadingMessage(`Processing folder ${parentNode.name}: ${Math.round((index / sortedChildren.length) * 100)}%`);
-        }
-        
         if (!file || !file.path) {
           console.warn("Skipping invalid file in children map");
           return null;
@@ -394,7 +386,7 @@ const Sidebar = ({
           type: isDirectory ? "directory" : "file",
           level: parentNode.level + 1,
           fileData: file,
-          isExpanded: expandedNodes[nodeId] !== undefined ? expandedNodes[nodeId] : true // Default to expanded
+          isExpanded: true // Default expanded state, will be updated in the next effect
         };
         
         if (isDirectory) {
@@ -410,17 +402,12 @@ const Sidebar = ({
     const convertToTreeNodes = (node: Record<string, any>, level = 0): TreeNode[] => {
       const keys = Object.keys(node);
       return keys.map((key, index) => {
-        if (index % 50 === 0 && keys.length > 100) {
-          setTreeLoadingMessage(`Building tree structure: ${Math.round((index / keys.length) * 100)}%`);
-        }
-        
         const item = node[key];
 
         if (item.type === "file") {
           return item as TreeNode;
         } else {
           const children = convertToTreeNodes(item.children, level + 1);
-          const isExpanded = expandedNodes[item.id] !== undefined ? expandedNodes[item.id] : true;
 
           return {
             ...item,
@@ -434,7 +421,7 @@ const Sidebar = ({
               }
               return a.name.localeCompare(b.name);
             }),
-            isExpanded,
+            isExpanded: true, // Default state, will be updated later
           };
         }
       });
@@ -443,11 +430,11 @@ const Sidebar = ({
     // Use a timeout to not block UI
     const buildTreeTimeoutId = setTimeout(buildTree, 0);
     return () => clearTimeout(buildTreeTimeoutId);
-  }, [allFiles, selectedFolder, expandedNodes]);
+  }, [allFiles, selectedFolder]);
 
   // Apply expanded state as a separate operation when expandedNodes change
   useEffect(() => {
-    if (fileTree.length === 0) return;
+    if (fileTree.length === 0 || !isTreeBuildingComplete) return;
 
     // Function to apply expanded state to nodes
     const applyExpandedState = (nodes: TreeNode[]): TreeNode[] => {
@@ -469,7 +456,7 @@ const Sidebar = ({
     };
 
     setFileTree((prevTree: TreeNode[]) => applyExpandedState(prevTree));
-  }, [expandedNodes, fileTree.length]);
+  }, [expandedNodes, fileTree.length, isTreeBuildingComplete]);
 
   // Flatten the tree for rendering with proper indentation
   const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
@@ -581,7 +568,7 @@ const Sidebar = ({
       </div>
 
       {allFiles.length > 0 ? (
-        isTreeBuildingComplete ? (
+        <>
           <div className="file-tree">
             {visibleTree.length > 0 ? (
               visibleTree.map((node) => (
@@ -599,20 +586,7 @@ const Sidebar = ({
               <div className="tree-empty">No files match your search.</div>
             )}
           </div>
-        ) : (
-          <div className="tree-loading">
-            <div className="spinner"></div>
-            <span>{treeLoadingMessage}</span>
-            <div className="loading-progress-indicator"></div>
-            <button
-              className="cancel-loading-btn"
-              onClick={() => window.electron.ipcRenderer.send("cancel-directory-loading")}
-              title="Cancel loading"
-            >
-              Cancel
-            </button>
-          </div>
-        )
+        </>
       ) : (
         <div className="tree-empty">No files found in this folder.</div>
       )}
