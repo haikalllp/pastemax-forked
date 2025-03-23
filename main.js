@@ -15,7 +15,12 @@ const {
   basename,
   dirname,
   isWindows,
-  isNode
+  isNode,
+  isValidPath,
+  join,
+  extname,
+  arePathsEqual,
+  isSubPath,
 } = require("./shared/path-utils");
 
 // Global variables for directory loading control
@@ -177,7 +182,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, "preload.js"),
+      preload: safePathJoin(__dirname, "preload.js"),
       // Production security settings
       sandbox: !isDev, // Enable sandbox in production for better security
       devTools: isDev, // Only enable DevTools in development
@@ -309,7 +314,7 @@ function createWindow() {
       });
     }, 2000);
   } else {
-    const indexPath = path.join(__dirname, "dist", "index.html");
+    const indexPath = safePathJoin(__dirname, "dist", "index.html");
     console.log(`Loading from built files at ${indexPath}`);
 
     // Use loadURL with file protocol for better path resolution
@@ -335,7 +340,7 @@ function createWindow() {
         });
       } else {
         // Retry with explicit file URL
-        const indexPath = path.join(__dirname, "dist", "index.html");
+        const indexPath = safePathJoin(__dirname, "dist", "index.html");
         const indexUrl = `file://${indexPath}`;
         mainWindow.loadURL(indexUrl);
       }
@@ -625,7 +630,8 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   // Limit directory depth to prevent excessive recursion
   const MAX_DEPTH = 20;
   // Tracking current depth
-  const depth = isRoot ? 0 : (dir.split(path.sep).length - rootDir.split(path.sep).length);
+  const pathSeparator = getPathSeparator();
+  const depth = isRoot ? 0 : (dir.split(pathSeparator).length - rootDir.split(pathSeparator).length);
   
   // Early return if we're too deep and not doing a deep scan
   if (depth > MAX_DEPTH && !isDeepScanEnabled) {
@@ -1160,7 +1166,12 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
   }
 });
 
-// Check if a file should be excluded by default, using glob matching
+/**
+ * Checks if a file should be excluded by default, using glob matching
+ * @param {string} filePath - The file path to check
+ * @param {string} rootDir - The root directory
+ * @returns {Promise<boolean>} - Whether the file should be excluded
+ */
 async function shouldExcludeByDefault(filePath, rootDir) {
   // Handle empty paths to prevent errors
   if (!filePath || !rootDir) {
@@ -1191,8 +1202,8 @@ async function shouldExcludeByDefault(filePath, rootDir) {
     }
 
     // Calculate the relative path
-    // Use path.relative for proper cross-platform path handling
-    let relativePath = path.relative(rootDir, filePath);
+    // Use our safeRelativePath for proper cross-platform path handling
+    const relativePath = safeRelativePath(rootDir, filePath);
     // Then normalize to forward slashes and make it a proper relative path
     const relativePathNormalized = makeRelativePath(relativePath);
     
@@ -1483,7 +1494,7 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
       const dirEntries = await fs.promises.readdir(dir, { withFileTypes: true });
       
       // Check if there's a .gitignore file in this directory
-      const gitignorePath = path.join(dir, '.gitignore');
+      const gitignorePath = safePathJoin(dir, '.gitignore');
       try {
         await fs.promises.access(gitignorePath, fs.constants.F_OK);
         gitignoreFiles.push(gitignorePath);
@@ -1494,7 +1505,7 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
       // Process subdirectories
       for (const entry of dirEntries) {
         if (entry.isDirectory() && !dirsToSkip.has(entry.name)) {
-          await findGitignoreInDir(path.join(dir, entry.name), currentDepth + 1);
+          await findGitignoreInDir(safePathJoin(dir, entry.name), currentDepth + 1);
         }
       }
     } catch (err) {
@@ -1523,8 +1534,8 @@ async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
 async function readGitignoreFile(filePath, rootDir) {
   try {
     const content = await fs.promises.readFile(filePath, 'utf8');
-    const dirPath = path.dirname(filePath);
-    const relativeDir = path.relative(rootDir, dirPath);
+    const dirPath = dirname(filePath);
+    const relativeDir = safeRelativePath(rootDir, dirPath);
     const normalizedRelativeDir = normalizePath(relativeDir);
     
     // Parse patterns from the file
@@ -1544,7 +1555,7 @@ async function readGitignoreFile(filePath, rootDir) {
     console.error(`Error reading gitignore file ${filePath}:`, err);
     return {
       path: filePath,
-      dirPath: path.dirname(filePath),
+      dirPath: dirname(filePath),
       patterns: [],
       error: err.message
     };
@@ -1666,10 +1677,9 @@ function mergeWithDefaultIgnores(consolidatedPatterns) {
 
 // Add isValidPath function for backward compatibility
 // This should be removed when we're confident everything uses the shared module
-function isValidPath(pathToCheck) {
+function _isValidPath(pathToCheck) {
   try {
-    path.parse(pathToCheck);
-    return true;
+    return isValidPath(pathToCheck);
   } catch (err) {
     return false;
   }

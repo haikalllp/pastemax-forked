@@ -11,7 +11,14 @@ import ThemeToggle from "./components/ThemeToggle";
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { generateAsciiFileTree, normalizePath, arePathsEqual, isSubPath, join, basename } from "./utils/pathUtils";
+import{ 
+  generateAsciiFileTree,
+  normalizePath,
+  arePathsEqual,
+  isSubPath,
+  join,
+  basename } 
+  from "./utils/pathUtils";
 
 // Access the electron API from the window object
 declare global {
@@ -352,9 +359,13 @@ const App = (): JSX.Element => {
     if (filter) {
       const lowerFilter = filter.toLowerCase();
       filtered = files.filter(
-        (file) =>
-          file.name.toLowerCase().includes(lowerFilter) ||
-          file.path.toLowerCase().includes(lowerFilter),
+        (file) => {
+          // Normalize paths before doing case-insensitive comparison
+          const normalizedPath = normalizePath(file.path);
+          
+          return file.name.toLowerCase().includes(lowerFilter) ||
+            normalizedPath.toLowerCase().includes(lowerFilter);
+        }
       );
     }
 

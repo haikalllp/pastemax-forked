@@ -7,7 +7,15 @@ import TreeItem from "./TreeItem";
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { normalizePath, join, isSubPath, arePathsEqual, basename } from "../utils/pathUtils";
+import { 
+  normalizePath, 
+  join, 
+  isSubPath, 
+  arePathsEqual, 
+  basename,
+  safeRelativePath,
+  makeRelativePath
+} from "../utils/pathUtils";
 
 /**
  * The Sidebar component displays a tree view of files and folders, allowing users to:
@@ -169,10 +177,11 @@ const Sidebar = ({
               ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1)
               : normalizedFilePath;
             
-            const parts = relativePath.split('/');
+            // Use the path utilities to split the path properly
+            const parts = makeRelativePath(relativePath).split('/').filter(Boolean);
             
             // Extra validation to prevent issues with malformed paths
-            if (parts.length === 0 || (parts.length === 1 && parts[0] === '')) {
+            if (parts.length === 0) {
               console.log("Skipping invalid path:", relativePath);
               return;
             }
@@ -297,12 +306,11 @@ const Sidebar = ({
         // Check if this file is a direct child of the parent
         // We need to handle both Unix and Windows path separators
         if (isSubPath(normalizedParentPath, normalizedFilePath)) {
-          // Get the relative path after the parent path
-          const relPath = normalizedFilePath.substring(normalizedParentPath.length);
-          // Remove leading slash if present
-          const cleanRelPath = relPath.startsWith('/') ? relPath.substring(1) : relPath;
+          // Get the relative path after the parent path using our utility
+          const relPath = safeRelativePath(normalizedParentPath, normalizedFilePath);
+          
           // Count path segments to ensure it's a direct child (only one level deep)
-          const segments = cleanRelPath.split('/').filter(Boolean);
+          const segments = makeRelativePath(relPath).split('/').filter(Boolean);
           return segments.length === 1;
         }
         
