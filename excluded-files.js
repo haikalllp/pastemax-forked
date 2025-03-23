@@ -168,25 +168,57 @@ const CORE_PATTERNS = {
 // Binary file extensions
 const BINARY_EXTENSIONS = [
   // Images
-  ".svg",
-  ".jpg", ".jpeg",
+  ".jpg",
+  ".jpeg",
   ".png",
   ".gif",
   ".bmp",
   ".tiff",
-  ".ico", ".icns",
+  ".ico",
+  ".icns",
   ".webp",
-
-  // Documents
+  ".svg",
+  ".heic",
+  ".heif",
   ".pdf",
-  ".doc", ".docx",
-  ".xls", ".xlsx",
-  ".ppt", ".pptx",
-
+  ".psd",
+  // Audio/Video
+  ".mp3",
+  ".mp4",
+  ".wav",
+  ".ogg",
+  ".avi",
+  ".mov",
+  ".mkv",
+  ".flac",
   // Archives
   ".zip",
-  ".tar.gz", ".tgz",
-  ".rar"
+  ".rar",
+  ".tar",
+  ".gz",
+  ".7z",
+  // Documents
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
+  // Compiled
+  ".exe",
+  ".dll",
+  ".so",
+  ".class",
+  ".o",
+  ".pyc",
+  // Database
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  // Others
+  ".bin",
+  ".dat",
 ];
 
 // Common directories that should be skipped during traversal for performance
