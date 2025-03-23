@@ -4,6 +4,20 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto"); // Added for CSP nonce generation
 
+// Import shared path utilities
+const { 
+  normalizePath, 
+  makeRelativePath, 
+  ensureAbsolutePath, 
+  safePathJoin, 
+  safeRelativePath,
+  getPathSeparator,
+  basename,
+  dirname,
+  isWindows,
+  isNode
+} = require("./shared/path-utils");
+
 // Global variables for directory loading control
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
@@ -32,104 +46,12 @@ const {
   binaryExtensions, 
   skipDirectories,
   defaultIgnorePatterns,
-  excludedRegexPatterns,
-  normalizePath // Import the normalizePath function for consistent use
+  excludedRegexPatterns
 } = require("./excluded-files");
 
 // List of directories that should be completely skipped during traversal
 // These are directories that often cause performance issues and don't provide useful content
 const SKIP_DIRS = skipDirectories;
-
-/**
- * Enhanced path handling functions for cross-platform compatibility
- */
-
-/**
- * Makes a path relative by removing drive letters and leading slashes
- * This is particularly useful for gitignore pattern matching
- * 
- * @param {string} filePath - The file path to make relative
- * @returns {string} - The path without drive letter and leading slashes
- */
-function makeRelativePath(filePath) {
-  if (!filePath) return filePath;
-  
-  // Normalize first using the imported function
-  let normalizedPath = normalizePath(filePath);
-  
-  // Remove drive letter (e.g., C:/) if present (Windows-specific)
-  normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
-  
-  // Remove leading slash if present
-  normalizedPath = normalizedPath.replace(/^\//, '');
-  
-  return normalizedPath;
-}
-
-/**
- * Get the platform-specific path separator
- */
-function getPathSeparator() {
-  return path.sep;
-}
-
-/**
- * Ensures a path is absolute and normalized for the current platform
- * @param {string} inputPath - The path to normalize
- * @returns {string} - Normalized absolute path
- */
-function ensureAbsolutePath(inputPath) {
-  if (!path.isAbsolute(inputPath)) {
-    inputPath = path.resolve(inputPath);
-  }
-  return normalizePath(inputPath);
-}
-
-/**
- * Safely joins paths across different platforms
- * @param {...string} paths - Path segments to join
- * @returns {string} - Normalized joined path
- */
-function safePathJoin(...paths) {
-  const joined = path.join(...paths);
-  return normalizePath(joined);
-}
-
-/**
- * Safely calculates relative path between two paths
- * Handles different OS path formats and edge cases
- * @param {string} from - Base path
- * @param {string} to - Target path
- * @returns {string} - Normalized relative path
- */
-function safeRelativePath(from, to) {
-  // Normalize both paths to use the same separator format
-  from = normalizePath(from);
-  to = normalizePath(to);
-  
-  // Handle Windows drive letter case-insensitivity
-  if (process.platform === 'win32') {
-    from = from.toLowerCase();
-    to = to.toLowerCase();
-  }
-  
-  let relativePath = path.relative(from, to);
-  return normalizePath(relativePath);
-}
-
-/**
- * Checks if a path is a valid path for the current OS
- * @param {string} pathToCheck - Path to validate
- * @returns {boolean} - True if path is valid
- */
-function isValidPath(pathToCheck) {
-  try {
-    path.parse(pathToCheck);
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
 
 // Add handling for the 'ignore' module
 let ignore;
@@ -1090,18 +1012,6 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   return results;
 }
 
-// Helper function to get basename
-function basename(path) {
-  if (!path) return "";
-  const normalizedPath = normalizePath(path);
-  const parts = normalizedPath.split('/');
-  // Get the last non-empty part
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (parts[i]) return parts[i];
-  }
-  return "";
-}
-
 // Handle file list request
 ipcMain.on("request-file-list", async (event, folderPath) => {
   try {
@@ -1752,4 +1662,15 @@ function mergeWithDefaultIgnores(consolidatedPatterns) {
   console.log(`- Unique after merging: ${mergedPatterns.length}`);
   
   return mergedPatterns;
+}
+
+// Add isValidPath function for backward compatibility
+// This should be removed when we're confident everything uses the shared module
+function isValidPath(pathToCheck) {
+  try {
+    path.parse(pathToCheck);
+    return true;
+  } catch (err) {
+    return false;
+  }
 }

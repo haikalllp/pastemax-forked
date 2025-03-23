@@ -2,14 +2,8 @@
 // Users can still manually select these files if needed
 // Paths include glob patterns and are normalized for cross-platform compatibility
 
-/**
- * Helper function to normalize a path for cross-platform compatibility
- * Ensures consistent forward slashes and proper pattern formatting
- */
-function normalizePath(path) {
-  // Convert backslashes to forward slashes for cross-platform compatibility
-  return path.replace(/\\/g, '/');
-}
+// Import shared path utilities
+const { normalizePath } = require('./shared/path-utils');
 
 // Basic categories for organization
 const CATEGORIES = {
