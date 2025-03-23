@@ -10,6 +10,7 @@ This document outlines the application hardening and security improvements made 
 - **User Instructions**: New feature allowing users to add custom instructions to copied code with `<user_instructions>` tags
 - **Selection Behavior**: Fixed folder selection to prevent directories from being selected when child files are selected (in FileList / 'Selected files' window)
 - **Theme System**: Enhanced dark mode implementation with improved contrast ratios and accessibility
+- **Improved Documentation**: Added comprehensive documentation for path utilities and build processes
 
 ### Cross-Platform Support
 - **Path Handling**: Comprehensive cross-platform path normalization and comparison utilities
@@ -17,6 +18,7 @@ This document outlines the application hardening and security improvements made 
 - **macOS Compatibility**: Enhanced support for case sensitivity options and bundle structures
 - **Linux Support**: Better handling of symbolic links and file permissions
 - **Safe Mode**: New recovery mechanism for handling startup issues across platforms
+- **Centralized Path Utilities**: Unified path handling through a centralized, type-safe API
 
 ### Performance & Architecture
 - **Tree Building**: Optimized file tree algorithm for large directory structures
@@ -24,6 +26,8 @@ This document outlines the application hardening and security improvements made 
 - **Code Cleanup**: Eliminated redundant code through better function consolidation
 - **Error Recovery**: Enhanced error handling for malformed files and inaccessible paths
 - **Defensive Programming**: Added robust validation and fallbacks throughout the codebase
+- **Modular Architecture**: Enhanced separation of concerns with improved component organization
+- **Build System**: Standardized build processes with clear documentation and consistent naming
 
 ### Security Improvements
 - **Content Security Policy**: Environment-specific CSP with nonce-based validation
@@ -31,6 +35,7 @@ This document outlines the application hardening and security improvements made 
 - **Navigation Protection**: Controls to prevent navigation to non-local content
 - **macOS Hardening**: Proper entitlements configuration for App Store compliance
 - **File Handling Security**: Path validation and protection against traversal attacks
+- **Cross-Platform Security**: Consistent security practices across Windows, macOS, and Linux
 
 ## 1. Application Security Hardening
 
@@ -117,6 +122,18 @@ This document outlines the application hardening and security improvements made 
 - Enhanced subpath detection with platform-aware `isSubPath` function
 - Improved basename and dirname extraction with cross-platform considerations
 - Added comprehensive debugging logs for path operations to troubleshoot platform-specific issues
+
+### Build System Standardization
+- Standardized script naming conventions using the `:` separator (e.g., `build:app` instead of `build-app`)
+- Ensured cross-platform compatibility in all npm scripts with consistent path patterns
+- Reorganized build tasks into logical categories for better maintainability
+- Created consistent build patterns with predictable task dependencies
+- Added comprehensive build documentation with visual flowcharts
+- Centralized build configurations for improved maintainability
+- Implemented clear distinction between development and production build processes
+- Created dedicated TypeScript configurations for different build targets
+- Added robust error handling for build failures with clear error messages
+- Ensured consistent compilation of path utilities before main application build
 
 ## 4. Build Process Security
 
@@ -266,6 +283,71 @@ This document outlines the application hardening and security improvements made 
 - Enhanced error messages with platform-specific troubleshooting guidance
 - Implemented defensive programming patterns to handle platform differences gracefully
 
+## 8. Path Utilities Architecture
+
+### Centralized Path Handling
+- Implemented a centralized path utilities system to ensure consistent path handling across processes
+- Created a TypeScript source of truth in `src/utils/pathUtils.ts` with proper type definitions
+- Built a CommonJS adapter in `shared/pathUtils.js` for main process compatibility
+- Implemented a seamless compilation pipeline from TypeScript to JavaScript
+- Added graceful fallbacks to ensure functionality even when compiled utilities are unavailable
+
+### Type-Safe API Design
+- Designed a comprehensive path API with clear function signatures and documentation
+- Implemented proper TypeScript interfaces for all path utility functions
+- Added JSDoc comments with examples to improve developer experience
+- Created defensive implementations with proper error checking and validation
+- Ensured consistent behavior across different operating systems
+
+### Cross-Process Communication
+- Developed a system for sharing path utilities between main and renderer processes
+- Created a compilation pipeline with `tsconfig.utils.json` for converting TypeScript to CommonJS
+- Implemented an adapter pattern to handle environment differences between processes
+- Ensured proper error handling and fallbacks for compilation failures
+- Added comprehensive tests to verify functionality in various scenarios
+
+### Testing Infrastructure
+- Created a dedicated test script `test:path-utils` to verify path utilities functionality
+- Implemented tests for compiled utilities, adapter behavior, and fallback mechanism
+- Added cross-platform test cases to ensure consistent behavior on all operating systems
+- Created edge case testing for unusual path formats and error conditions
+- Implemented automated verification of path utility functions
+
+## 9. Build Process Improvements
+
+### Standardized Build System
+- Completely reorganized the build system with consistent naming conventions and patterns
+- Replaced hyphenated script names with colon-based namespaces (`build-electron` → `build:electron`)
+- Created a logical hierarchy of build tasks with clear dependencies
+- Added comprehensive documentation in `docs/build-process.md` with visual flowcharts
+- Ensured all build scripts use cross-platform path patterns
+
+### Build Command Categories
+- Organized build commands into logical categories:
+  - Core build commands (`build:utils`, `build:app`, `build:electron`)
+  - Packaging commands (`package`, `package:win`, `package:mac`, `package:linux`, `package:all`)
+  - Testing commands (`test:path-utils`, `test:gitignore`, `test:gitignore:cross`)
+  - Utility commands (`clean`, `clean:dist`, `clean:utils`)
+- Created a standardized pattern for cross-platform script execution
+- Added environment variable handling with `cross-env` for platform independence
+
+### Package Configuration
+- Enhanced the package.json configuration for cross-platform compatibility
+- Standardized file paths with forward slashes for consistent behavior
+- Optimized build dependencies to ensure correct execution order
+- Added proper command chaining with fallback handling
+- Implemented consistent error reporting across build steps
+
+### Documentation
+- Created comprehensive documentation for the build process:
+  - Visual flowcharts showing command relationships and dependencies
+  - Detailed explanations of each command and its purpose
+  - Table of available commands with descriptions
+  - Platform-specific packaging information
+  - Development vs. production build guidance
+- Updated README.md with clear build instructions for all platforms
+- Added troubleshooting guidance for common build issues
+
 ## Next Steps
 - Consider implementing ASAR archive encryption for additional protection
 - Investigate Electron's contextBridge for more secure IPC
@@ -275,3 +357,7 @@ This document outlines the application hardening and security improvements made 
 - Implement more advanced file tree navigation features like bookmarks and favorites
 - Add multi-selection capabilities for easier bulk operations
 - Consider adding drag-and-drop functionality for file selection
+- Enhance the path utilities with more advanced features like path validation
+- Expand test coverage to include more edge cases and platform-specific scenarios
+- Consider a more sophisticated build system with incremental compilation
+- Create additional documentation for advanced usage patterns

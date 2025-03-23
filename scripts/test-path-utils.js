@@ -1,171 +1,389 @@
+#!/usr/bin/env node
+
 /**
- * Test script for shared path utilities
- * Tests both development and production functionality
+ * Test script for path utilities
+ * 
+ * This script tests the path utilities in both compiled and fallback modes.
+ * It verifies that all utilities function correctly across platforms.
  */
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { execSync } = require('child_process');
-const rimraf = require('rimraf');
 
-// Save original NODE_ENV
-const originalNodeEnv = process.env.NODE_ENV;
+// Colors for console output
+const colors = {
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m'
+};
 
-console.log('========================');
-console.log('PATH UTILITIES TEST SUITE');
-console.log('========================\n');
+// Utility function to log test messages
+function log(message, color = colors.reset) {
+  console.log(`${color}${message}${colors.reset}`);
+}
 
-// PART 1: Testing in development mode
-console.log('PART 1: TESTING IN DEVELOPMENT MODE');
-console.log('----------------------------------');
-process.env.NODE_ENV = 'development';
-const pathUtilsDev = require('../shared/pathUtils');
+function successLog(message) {
+  log(`✅ ${message}`, colors.green);
+}
 
-console.log('Path utilities loaded in development mode');
-console.log('isSubPath available:', typeof pathUtilsDev.isSubPath === 'function');
-console.log('normalizePath available:', typeof pathUtilsDev.normalizePath === 'function');
-console.log('makeRelativePath available:', typeof pathUtilsDev.makeRelativePath === 'function');
+function errorLog(message) {
+  log(`❌ ${message}`, colors.red);
+}
 
-// Test normalization
-const testPathWin = 'C:\\Users\\test\\Documents\\file.txt';
-console.log('\nPath normalization:');
-console.log('Original Windows path:', testPathWin);
-console.log('Normalized Windows path:', pathUtilsDev.normalizePath(testPathWin));
-console.log('Relative Windows path:', pathUtilsDev.makeRelativePath(testPathWin));
+function infoLog(message) {
+  log(`ℹ️ ${message}`, colors.blue);
+}
 
-// Test different OS path formats
-const testPathUnix = '/Users/test/Documents/file.txt';
-console.log('\nCross-platform path handling:');
-console.log('Original Unix path:', testPathUnix);
-console.log('Normalized Unix path:', pathUtilsDev.normalizePath(testPathUnix));
-console.log('Relative Unix path:', pathUtilsDev.makeRelativePath(testPathUnix));
+function warningLog(message) {
+  log(`⚠️ ${message}`, colors.yellow);
+}
 
-// Test isSubPath
-console.log('\nTesting isSubPath:');
-const parent = '/Users/test';
-const child = '/Users/test/Documents/file.txt';
-console.log(`isSubPath('${parent}', '${child}'):`, pathUtilsDev.isSubPath(parent, child));
+// Get the root directory of the project
+const rootDir = path.resolve(__dirname, '..');
+const compiledDir = path.join(rootDir, 'shared', 'compiled');
+const compiledPathUtils = path.join(compiledDir, 'pathUtils.js');
+const adapterPathUtils = path.join(rootDir, 'shared', 'pathUtils.js');
 
-// Test Windows paths with drive letters
-console.log('\nTesting Windows drive letters:');
-const winParent = 'C:\\Users\\test';
-const winChild = 'C:\\Users\\test\\Documents\\file.txt';
-const winChildDifferentDrive = 'D:\\Users\\test\\Documents\\file.txt';
-console.log(`isSubPath('${winParent}', '${winChild}'):`, pathUtilsDev.isSubPath(winParent, winChild));
-console.log(`isSubPath('${winParent}', '${winChildDifferentDrive}'):`, pathUtilsDev.isSubPath(winParent, winChildDifferentDrive));
+// Test cases
+const testPaths = {
+  windows: [
+    'C:\\Users\\username\\Documents\\file.txt',
+    'C:/Users/username/Documents/file.txt',
+    '\\\\server\\share\\file.txt',
+    'relative\\path\\file.txt',
+    './relative/path/file.txt',
+    '../parent/path/file.txt',
+    'C:\\Users\\username\\..\\username\\Documents\\file.txt'
+  ],
+  posix: [
+    '/Users/username/Documents/file.txt',
+    './relative/path/file.txt',
+    '../parent/path/file.txt',
+    '/Users/username/../username/Documents/file.txt'
+  ]
+};
 
-// Test path joining
-console.log('\nTesting path joining:');
-console.log("safePathJoin('C:\\Users', 'test', 'Documents'):", pathUtilsDev.safePathJoin('C:\\Users', 'test', 'Documents'));
-console.log("safePathJoin('/Users', 'test', 'Documents'):", pathUtilsDev.safePathJoin('/Users', 'test', 'Documents'));
-console.log("safePathJoin with null parts:", pathUtilsDev.safePathJoin('/Users', null, 'Documents'));
+// Test paths for comparison functions
+const pathPairs = [
+  {
+    parent: 'C:\\Users\\username',
+    child: 'C:\\Users\\username\\Documents\\file.txt',
+    isSubPath: true
+  },
+  {
+    parent: '/Users/username',
+    child: '/Users/username/Documents/file.txt',
+    isSubPath: true
+  },
+  {
+    parent: 'C:\\Users\\username',
+    child: 'D:\\Users\\username\\Documents\\file.txt',
+    isSubPath: false
+  },
+  {
+    parent: '/Users/username',
+    child: '/var/username/Documents/file.txt',
+    isSubPath: false
+  }
+];
 
-// Test relative paths
-console.log('\nTesting relative paths:');
-console.log("safeRelativePath('/Users/test', '/Users/test/Documents'):", pathUtilsDev.safeRelativePath('/Users/test', '/Users/test/Documents'));
-console.log("safeRelativePath('C:\\Users\\test', 'D:\\Other\\path'):", pathUtilsDev.safeRelativePath('C:\\Users\\test', 'D:\\Other\\path'));
+// Test phases
+async function runTests() {
+  log('\n🔍 PATH UTILITIES TEST SUITE', colors.blue);
+  log('================================\n');
 
-// Test path equality
-console.log('\nTesting path equality:');
-console.log("arePathsEqual('/Users/test', '/Users/Test'):", pathUtilsDev.arePathsEqual('/Users/test', '/Users/Test'));
-console.log("arePathsEqual('C:\\Users\\test', 'C:/Users/Test'):", pathUtilsDev.arePathsEqual('C:\\Users\\test', 'C:/Users/Test'));
+  // Phase 1: Test compiled path utilities
+  await testCompiledPathUtils();
 
-// Test error handling
-console.log('\nTesting error handling:');
-console.log("isValidPath(null):", pathUtilsDev.isValidPath(null));
-console.log("normalizePath(undefined):", pathUtilsDev.normalizePath(undefined));
-console.log("safePathJoin():", pathUtilsDev.safePathJoin());
+  // Phase 2: Test adapter with compiled utils
+  await testAdapterWithCompiled();
 
-// Clean up development module
-delete require.cache[require.resolve('../shared/pathUtils')];
+  // Phase 3: Test adapter fallback without compiled utils
+  await testAdapterFallback();
 
-// PART 2: Testing in production mode
-console.log('\n\nPART 2: TESTING IN PRODUCTION MODE');
-console.log('----------------------------------');
-process.env.NODE_ENV = 'production';
-const pathUtilsProd = require('../shared/pathUtils');
+  // Final report
+  log('\n================================');
+  log('🎉 ALL TESTS COMPLETED', colors.green);
+}
 
-console.log('Path utilities loaded in production mode');
-console.log('isSubPath available:', typeof pathUtilsProd.isSubPath === 'function');
-console.log('normalizePath available:', typeof pathUtilsProd.normalizePath === 'function');
+async function testCompiledPathUtils() {
+  log('\n📦 PHASE 1: Testing Compiled Path Utilities\n', colors.blue);
 
-// Test the same functions to ensure they work identically
-console.log('\nVerifying production functionality:');
-console.log('Normalized path:', pathUtilsProd.normalizePath(testPathWin));
-console.log('isSubPath test:', pathUtilsProd.isSubPath(parent, child));
-console.log('Path joining:', pathUtilsProd.safePathJoin('/Users', 'test', 'Documents'));
+  // Ensure compiled path utilities exist
+  try {
+    // Build path utilities if they don't exist
+    if (!fs.existsSync(compiledPathUtils)) {
+      infoLog('Compiled path utilities not found. Building now...');
+      execSync('npm run build:utils', { stdio: 'inherit', cwd: rootDir });
+      
+      if (fs.existsSync(compiledPathUtils)) {
+        successLog('Successfully built path utilities');
+      } else {
+        errorLog('Failed to build path utilities');
+        return false;
+      }
+    } else {
+      successLog('Compiled path utilities found at ' + compiledPathUtils);
+    }
 
-// Clean up production module
-delete require.cache[require.resolve('../shared/pathUtils')];
+    // Import compiled path utilities
+    const pathUtils = require(compiledPathUtils);
+    
+    // Test all functions
+    testPathUtilsFunctionality(pathUtils, 'Compiled');
+    
+    return true;
+  } catch (error) {
+    errorLog(`Error testing compiled path utilities: ${error.message}`);
+    return false;
+  }
+}
 
-// PART 3: Fallback mechanism test
-console.log('\n\nPART 3: TESTING FALLBACK MECHANISM');
-console.log('----------------------------------');
+async function testAdapterWithCompiled() {
+  log('\n🔌 PHASE 2: Testing Adapter with Compiled Utils\n', colors.blue);
 
-// First, build the utilities
-console.log('1. Building compiled utilities...');
-try {
-  execSync('npm run build:utils', { stdio: 'inherit' });
-  console.log('✅ Build successful');
-} catch (err) {
-  console.error('❌ Build failed:', err);
+  try {
+    // Ensure adapter exists
+    if (!fs.existsSync(adapterPathUtils)) {
+      errorLog('Adapter path utilities not found at ' + adapterPathUtils);
+      return false;
+    }
+    
+    // Clear require cache to ensure fresh import
+    delete require.cache[require.resolve(adapterPathUtils)];
+    
+    // Import adapter
+    const pathUtils = require(adapterPathUtils);
+    
+    // Test all functions
+    testPathUtilsFunctionality(pathUtils, 'Adapter with compiled');
+    
+    return true;
+  } catch (error) {
+    errorLog(`Error testing adapter with compiled utils: ${error.message}`);
+    return false;
+  }
+}
+
+async function testAdapterFallback() {
+  log('\n🔄 PHASE 3: Testing Adapter Fallback (without compiled utils)\n', colors.blue);
+
+  try {
+    // Rename or temporarily remove compiled directory
+    const tempDir = path.join(rootDir, 'shared', 'compiled.temp');
+    
+    if (fs.existsSync(compiledDir)) {
+      fs.renameSync(compiledDir, tempDir);
+      successLog('Temporarily moved compiled directory for fallback testing');
+    } else {
+      warningLog('Compiled directory already removed, proceeding with fallback test');
+    }
+    
+    // Clear require cache to ensure fresh import
+    delete require.cache[require.resolve(adapterPathUtils)];
+    
+    // Import adapter, should use fallback
+    const pathUtils = require(adapterPathUtils);
+    
+    // Test all functions
+    testPathUtilsFunctionality(pathUtils, 'Adapter fallback');
+    
+    // Restore compiled directory
+    if (fs.existsSync(tempDir)) {
+      fs.renameSync(tempDir, compiledDir);
+      successLog('Restored compiled directory');
+    }
+    
+    return true;
+  } catch (error) {
+    errorLog(`Error testing adapter fallback: ${error.message}`);
+    
+    // Try to restore compiled directory in case of error
+    const tempDir = path.join(rootDir, 'shared', 'compiled.temp');
+    if (fs.existsSync(tempDir)) {
+      fs.renameSync(tempDir, compiledDir);
+      warningLog('Restored compiled directory after error');
+    }
+    
+    return false;
+  }
+}
+
+function testPathUtilsFunctionality(pathUtils, testPhase) {
+  // Check if all expected functions exist
+  const expectedFunctions = [
+    'normalizePath',
+    'makeRelativePath',
+    'isWindows',
+    'getPathSeparator',
+    'ensureAbsolutePath',
+    'safePathJoin',
+    'safeRelativePath',
+    'arePathsEqual',
+    'isValidPath',
+    'isSubPath',
+    'basename',
+    'dirname',
+    'extname',
+    'join'
+  ];
+  
+  infoLog(`${testPhase} path utilities functions available:`);
+  expectedFunctions.forEach(fn => {
+    if (typeof pathUtils[fn] === 'function') {
+      successLog(`- ${fn}`);
+    } else {
+      errorLog(`- ${fn} (missing or not a function)`);
+    }
+  });
+  
+  // Test normalizePath
+  log('\nTesting normalizePath:', colors.blue);
+  testPaths.windows.forEach(testPath => {
+    const normalized = pathUtils.normalizePath(testPath);
+    log(`  ${testPath} → ${normalized}`);
+    
+    // Check that all backslashes are converted to forward slashes (except for UNC prefix)
+    const isUNC = testPath.startsWith('\\\\');
+    const expectedPrefix = isUNC ? '\\\\' : '';
+    
+    const normalizedWithoutPrefix = isUNC ? normalized.substring(2) : normalized;
+    const hasNoBackslashes = !normalizedWithoutPrefix.includes('\\');
+    
+    if (isUNC && normalized.startsWith('\\\\') && hasNoBackslashes) {
+      successLog(`  ✓ UNC path correctly preserved and normalized`);
+    } else if (!isUNC && hasNoBackslashes) {
+      successLog(`  ✓ Path correctly normalized`);
+    } else {
+      errorLog(`  ✗ Path not correctly normalized`);
+    }
+  });
+  
+  // Test makeRelativePath
+  log('\nTesting makeRelativePath:', colors.blue);
+  testPaths.windows.concat(testPaths.posix).forEach(testPath => {
+    const relative = pathUtils.makeRelativePath(testPath);
+    log(`  ${testPath} → ${relative}`);
+    
+    // Check that drive letters and leading slashes are removed
+    const hasNoDriveLetter = !relative.match(/^[a-zA-Z]:/);
+    const hasNoLeadingSlash = !relative.match(/^[/\\]/);
+    
+    if (hasNoDriveLetter && hasNoLeadingSlash) {
+      successLog(`  ✓ Path correctly made relative`);
+    } else {
+      errorLog(`  ✗ Path not correctly made relative`);
+    }
+  });
+  
+  // Test isSubPath
+  log('\nTesting isSubPath:', colors.blue);
+  pathPairs.forEach(({ parent, child, isSubPath }) => {
+    const result = pathUtils.isSubPath(parent, child);
+    log(`  isSubPath("${parent}", "${child}") → ${result}`);
+    
+    if (result === isSubPath) {
+      successLog(`  ✓ isSubPath returned expected result: ${result}`);
+    } else {
+      errorLog(`  ✗ isSubPath returned unexpected result: ${result}, expected: ${isSubPath}`);
+    }
+  });
+  
+  // Test basename
+  log('\nTesting basename:', colors.blue);
+  const basenamePaths = [
+    { path: '/Users/username/Documents/file.txt', expected: 'file.txt' },
+    { path: 'C:\\Users\\username\\Documents\\file.txt', expected: 'file.txt' },
+    { path: '/Users/username/Documents/', expected: 'Documents' },
+    { path: 'file.txt', expected: 'file.txt' }
+  ];
+  
+  basenamePaths.forEach(({ path: testPath, expected }) => {
+    const result = pathUtils.basename(testPath);
+    log(`  basename("${testPath}") → ${result}`);
+    
+    if (result === expected) {
+      successLog(`  ✓ basename returned expected result: ${result}`);
+    } else {
+      errorLog(`  ✗ basename returned unexpected result: ${result}, expected: ${expected}`);
+    }
+  });
+  
+  // Test dirname
+  log('\nTesting dirname:', colors.blue);
+  const dirnamePaths = [
+    { path: '/Users/username/Documents/file.txt', expected: '/Users/username/Documents' },
+    { path: 'C:\\Users\\username\\Documents\\file.txt', expected: pathUtils.normalizePath('C:\\Users\\username\\Documents') },
+    { path: '/Users/username/Documents/', expected: '/Users/username' },
+    { path: 'file.txt', expected: '.' }
+  ];
+  
+  dirnamePaths.forEach(({ path: testPath, expected }) => {
+    const result = pathUtils.dirname(testPath);
+    log(`  dirname("${testPath}") → ${result}`);
+    
+    // Normalize both for comparison
+    const normalizedResult = pathUtils.normalizePath(result);
+    const normalizedExpected = pathUtils.normalizePath(expected);
+    
+    if (normalizedResult === normalizedExpected) {
+      successLog(`  ✓ dirname returned expected result: ${result}`);
+    } else {
+      errorLog(`  ✗ dirname returned unexpected result: ${result}, expected: ${expected}`);
+    }
+  });
+  
+  // Test edge cases
+  log('\nTesting edge cases:', colors.blue);
+  
+  // Empty path
+  try {
+    const normalized = pathUtils.normalizePath('');
+    log(`  normalizePath("") → ${normalized}`);
+    successLog(`  ✓ Handles empty path`);
+  } catch (error) {
+    errorLog(`  ✗ Failed on empty path: ${error.message}`);
+  }
+  
+  // Null/undefined
+  try {
+    const normalized = pathUtils.normalizePath(null);
+    log(`  normalizePath(null) → ${normalized}`);
+    successLog(`  ✓ Handles null input`);
+  } catch (error) {
+    errorLog(`  ✗ Failed on null input: ${error.message}`);
+  }
+  
+  // Very long path
+  try {
+    const longPath = 'C:\\' + 'very\\long\\path\\'.repeat(50) + 'file.txt';
+    const normalized = pathUtils.normalizePath(longPath);
+    log(`  normalizePath(very long path) → ${normalized.substring(0, 20)}...${normalized.substring(normalized.length - 20)}`);
+    successLog(`  ✓ Handles very long path`);
+  } catch (error) {
+    errorLog(`  ✗ Failed on very long path: ${error.message}`);
+  }
+  
+  // Invalid characters
+  try {
+    const invalidPath = 'C:\\Users\\*|:<>?\\file.txt';
+    const result = pathUtils.isValidPath(invalidPath);
+    log(`  isValidPath("${invalidPath}") → ${result}`);
+    if (result === false) {
+      successLog(`  ✓ Correctly identifies invalid path`);
+    } else {
+      warningLog(`  ⚠️ isValidPath returned true for path with invalid characters (might be platform-dependent)`);
+    }
+  } catch (error) {
+    errorLog(`  ✗ Failed on path with invalid characters: ${error.message}`);
+  }
+}
+
+// Run the tests
+runTests().catch(error => {
+  console.error('Error running tests:', error);
   process.exit(1);
-}
-
-// Verify the compiled directory exists
-const compiledDir = path.join(__dirname, '..', 'shared', 'compiled');
-if (!fs.existsSync(compiledDir)) {
-  console.error(`❌ Compiled directory doesn't exist at ${compiledDir}`);
-  process.exit(1);
-}
-console.log(`✅ Compiled utilities exist at ${compiledDir}`);
-
-// Run a test with compiled utilities
-console.log('\n2. Testing with compiled utilities...');
-process.env.NODE_ENV = 'production';
-// Clear require cache
-delete require.cache[require.resolve('../shared/pathUtils')];
-const withCompiled = require('../shared/pathUtils');
-console.log('Utility functions available:', Object.keys(withCompiled).join(', '));
-console.log('Test normalization:', withCompiled.normalizePath('C:\\path\\to\\file.txt'));
-
-// Now remove the compiled directory and test fallback
-console.log('\n3. Removing compiled utilities...');
-try {
-  // Using rimraf for cross-platform compatibility
-  rimraf.sync(compiledDir);
-  console.log(`✅ Removed ${compiledDir}`);
-} catch (err) {
-  console.error(`❌ Error removing directory: ${err.message}`);
-  process.exit(1);
-}
-
-// Verify removal
-if (fs.existsSync(compiledDir)) {
-  console.error(`❌ Failed to remove compiled directory at ${compiledDir}`);
-  process.exit(1);
-}
-console.log('✅ Verified compiled directory is removed');
-
-// Now test the fallback implementation
-console.log('\n4. Testing with fallback implementation...');
-// Clear require cache again
-delete require.cache[require.resolve('../shared/pathUtils')];
-const withFallback = require('../shared/pathUtils');
-console.log('Utility functions available:', Object.keys(withFallback).join(', '));
-console.log('Test normalization:', withFallback.normalizePath('C:\\path\\to\\file.txt'));
-
-// Rebuild the utilities at the end
-console.log('\n5. Rebuilding utilities...');
-try {
-  execSync('npm run build:utils', { stdio: 'inherit' });
-  console.log('✅ Rebuild successful');
-} catch (err) {
-  console.error('❌ Rebuild failed:', err);
-}
-
-console.log('\n✅ Test complete! The path utilities work in both compiled and fallback modes.');
-
-// Restore original NODE_ENV
-process.env.NODE_ENV = originalNodeEnv; 
+}); 

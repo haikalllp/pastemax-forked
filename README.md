@@ -5,7 +5,7 @@
 
 A modern file viewer application for developers to easily navigate, search, and copy code from repositories. Ideal for pasting into ChatGPT or your LLM of choice. Built with Electron, React, and TypeScript.
 
-![Screenshot 2025-03-05 at 6 50 55 PM](https://github.com/user-attachments/assets/1f5cd814-69db-44f7-b230-3648cdfcfa6f)
+![Screenshot 2025-03-05 at 6 50 55 PM](https://github.com/user-attachments/assets/1f5cd814-69db-44f7-b230-3648cdfcfa6f)
 
 ## Video
 [YouTube Link](https://youtu.be/YV-pZSDNnPo)
@@ -20,6 +20,7 @@ A modern file viewer application for developers to easily navigate, search, and 
 - **Dark Mode**: Toggle between light and dark themes for comfortable viewing in any environment
 - **Binary File Detection**: Automatic detection and exclusion of binary files
 - **Smart File Exclusion**: Automatically excludes common files like package-lock.json, binary files, and more by default
+- **Cross-Platform Path Handling**: Consistent file path handling across Windows, macOS, and Linux
 
 ## Installation
 
@@ -45,19 +46,40 @@ npm install
 3. Build the app:
 
 ```
-npm run build-electron
+# Build with Electron-specific configuration
+npm run build:electron
+
+# Package the app for distribution
 npm run package
 ```
 
-**Note for Windows users**: If you encounter issues with `npm run package`, you can try the platform-specific command:
+**Note**: If you encounter issues with `npm run package`, you can try the platform-specific commands:
 
 ```
+# Windows
 npm run package:win
+
+# macOS
+npm run package:mac
+
+# Linux
+npm run package:linux
 ```
 
 After successful build, you'll find the executable files in the `release-builds` directory:
-- `PasteMax Setup 1.0.0.exe` - Installer version
-- `PasteMax 1.0.0.exe` - Portable version
+
+#### Windows
+- `PasteMax Setup 1.x.x.exe` - Installer version
+- `PasteMax 1.x.x.exe` - Portable version
+
+#### macOS
+- `PasteMax-1.x.x.dmg` - Disk image installer
+- `PasteMax-1.x.x-mac.zip` - Zipped application
+
+#### Linux
+- `pastemax_1.x.x_amd64.deb` - Debian/Ubuntu package
+- `pastemax-1.x.x.AppImage` - AppImage (runs on most Linux distributions)
+- `pastemax-1.x.x.x86_64.rpm` - Red Hat/Fedora package
 
 ## Development
 
@@ -87,22 +109,79 @@ npm run dev
 npm run dev:electron
 ```
 
+### Cleaning build
+
+To clean dependencies and builds:
+
+```
+# Clean all of dependencies and builds
+npm run clean
+
+# Clean only builds
+npm run clean:dist
+```
+
 ### Building for Production
 
-To build the application for production:
+The build process has three main steps:
+
+1. **Build the React app and utilities** (choose one):
+   ```
+   # Complete build with Electron-specific configuration
+   npm run build:electron
+   ```
+
+2. **Package the application**:
+   ```
+   # Create distributables for your current platform
+   npm run package
+   ```
+
+3. **Platform-specific packaging** (optional):
+   ```
+   # Windows only
+   npm run package:win
+   
+   # macOS only
+   npm run package:mac
+   
+   # Linux only
+   npm run package:linux
+   
+   # All platforms
+   npm run package:all
+   ```
+
+The build process flow is:
+```
+build → package → release
+```
+
+For a detailed explanation of the build process with visual flowcharts, see the [build process documentation](docs/build-process.md).
+
+### Testing
+
+The project includes several test scripts to verify functionality:
 
 ```
-# Build the React app with Vite and update paths for Electron
-npm run build-electron
+# Test path utilities (cross-platform path handling)
+npm run test:path-utils
 
-# Create platform-specific distributables
-npm run package
+# Test gitignore functionality
+npm run test:gitignore
+
+# Test cross-platform gitignore compatibility
+npm run test:gitignore:cross
 ```
 
-Platform-specific build commands:
-- Windows: `npm run package:win`
-- macOS: `npm run package:mac`
-- Linux: `npm run package:linux`
+### Utility Building
+
+Path utilities can be built separately for use in both main and renderer processes:
+
+```
+# Build only the path utilities
+npm run build:utils
+```
 
 ## Project Structure
 
@@ -110,11 +189,18 @@ Platform-specific build commands:
   - `components/` - React components
   - `types/` - TypeScript type definitions
   - `styles/` - CSS styles
+  - `utils/` - Utility functions
+    - `pathUtils.ts` - Cross-platform path handling utilities
+- `shared/` - Shared utilities between main and renderer processes
+  - `pathUtils.js` - Adapter for path utilities in CommonJS format
+  - `compiled/` - Compiled TypeScript utilities
 - `main.js` - Electron main process
 - `build.js` - Build script for production
 - `excluded-files.js` - Configuration for files to exclude by default
 - `docs/` - Documentation
   - `excluded-files.md` - Documentation for the file exclusion feature
+  - `path-utilities.md` - Documentation for cross-platform path handling
+- `scripts/` - Build and test scripts
 
 ## Libraries Used
 
@@ -146,13 +232,13 @@ This is caused by dependencies not being properly included in the package. To fi
 1. Run the dependency fixer script:
 
    ```
-   node fix-dependencies.js
+   node scripts/fix-dependencies.js
    ```
 
 2. Rebuild the application:
 
    ```
-   npm run build-electron && npm run package
+   npm run build:electron && npm run package
    ```
 
 3. Install the new version
