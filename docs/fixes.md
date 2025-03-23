@@ -13,12 +13,16 @@ This document outlines the key fixes and improvements implemented to address iss
 - Created a shared path utilities module in `shared/path-utils.js` with TypeScript definitions
 - Standardized path functions to work consistently across Node.js and browser environments
 - Implemented robust handling of Windows and Unix paths
+- Added explicit macOS detection and compatibility logic
+- Enhanced handling of macOS-specific paths (app bundles, resource forks)
+- Addressed macOS filesystem case sensitivity variations
 - Removed duplicate implementations of path functions
 
 ### Impact
 - Consistent path normalization throughout the application
 - Cross-platform compatibility for path operations
 - More reliable path comparisons for `.gitignore` pattern matching
+- Proper handling of macOS-specific path formats
 
 ## `.gitignore` Handling
 
@@ -32,6 +36,7 @@ This document outlines the key fixes and improvements implemented to address iss
 - Improved `.gitignore` loading with better caching
 - Enhanced pattern matching with normalized paths
 - Added early checks for common patterns before expensive `.gitignore` processing
+- Ensured consistent handling across Windows, macOS, and Linux
 
 ### Impact
 - Correctly identifies and ignores files as specified in `.gitignore`
@@ -84,12 +89,18 @@ This document outlines the key fixes and improvements implemented to address iss
 ### Solution
 - Implemented platform detection in the shared path utilities
 - Added special handling for Windows-specific path quirks
+- Improved macOS compatibility through:
+  - Explicit macOS platform detection (`isMac` flag)
+  - Special handling for macOS `.app` bundles and package structures
+  - Support for macOS resource fork paths (`..namedfork`)
+  - Addressing macOS case sensitivity variations (HFS+, APFS)
 - Created cross-platform tests to ensure consistent behavior
 
 ### Impact
 - Consistent application behavior across different operating systems
 - Reliable path matching regardless of platform
 - Better user experience on all supported platforms
+- Proper handling of platform-specific path formats
 
 ## Code Organization and Maintainability
 

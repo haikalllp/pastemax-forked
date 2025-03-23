@@ -19,9 +19,16 @@ const isWindows = isNode
     navigator.platform && 
     /win/i.test(navigator.platform);
 
+// Detect macOS platform
+const isMac = isNode
+  ? process.platform === 'darwin'
+  : typeof navigator !== 'undefined' &&
+    navigator.platform &&
+    (/mac/i.test(navigator.platform));
+
 /**
  * Normalizes file paths to use forward slashes regardless of OS
- * Handles special cases like Windows UNC paths
+ * Handles special cases like Windows UNC paths and macOS-specific paths
  * 
  * @param {string} filePath - The file path to normalize
  * @returns {string} - The normalized path
@@ -33,6 +40,21 @@ function normalizePath(filePath) {
   if (isNode && isWindows && filePath.startsWith('\\\\')) {
     // Preserve the UNC path format but normalize separators
     return '\\\\' + filePath.slice(2).replace(/\\/g, '/');
+  }
+
+  // Handle macOS resource fork paths (those containing /..namedfork/)
+  // Example: /path/to/file/..namedfork/rsrc
+  if (filePath.includes('/..namedfork/') || filePath.includes('\\..namedfork\\')) {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    // Keep the resource fork structure intact while normalizing the path
+    const parts = normalizedPath.split('/..namedfork/');
+    return normalizePath(parts[0]) + '/..namedfork/' + parts[1];
+  }
+  
+  // Special handling for macOS .app bundles
+  // Example: /Applications/App.app/Contents/Resources/file.txt
+  if (filePath.includes('.app/') || filePath.includes('.app\\')) {
+    return filePath.replace(/\\/g, '/');
   }
 
   // Standard normalization for all other paths
@@ -171,7 +193,15 @@ function arePathsEqual(path1, path2) {
     return relativePath1.toLowerCase() === relativePath2.toLowerCase();
   }
   
-  // On other systems (Mac, Linux), paths are case-sensitive
+  // On macOS, paths are typically case-insensitive by default (HFS+, APFS)
+  // but can be configured to be case-sensitive
+  if (isMac) {
+    // Default to case-insensitive comparison for maximum compatibility
+    // Most macOS systems use case-insensitive filesystems by default
+    return relativePath1.toLowerCase() === relativePath2.toLowerCase();
+  }
+  
+  // On other systems (Linux), paths are case-sensitive
   return relativePath1 === relativePath2;
 }
 
@@ -215,7 +245,13 @@ function isSubPath(parent, child) {
     return normalizedChild.toLowerCase().startsWith(parentWithSlash.toLowerCase());
   }
   
-  // Case-sensitive comparison for other platforms
+  // On macOS, paths are typically case-insensitive by default
+  if (isMac) {
+    // Use case-insensitive comparison for macOS
+    return normalizedChild.toLowerCase().startsWith(parentWithSlash.toLowerCase());
+  }
+  
+  // Case-sensitive comparison for other platforms (Linux)
   return normalizedChild.startsWith(parentWithSlash);
 }
 
@@ -371,4 +407,5 @@ module.exports = {
   getPathSeparator,
   isWindows,
   isNode,
+  isMac,
 }; 

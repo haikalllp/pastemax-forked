@@ -5,7 +5,7 @@
 
 /**
  * Normalizes file paths to use forward slashes regardless of OS
- * Handles special cases like Windows UNC paths
+ * Handles special cases like Windows UNC paths and macOS-specific paths
  */
 export function normalizePath(filePath: string): string;
 
@@ -63,7 +63,7 @@ export function safeRelativePath(from: string, to: string): string;
 export function ensureAbsolutePath(inputPath: string): string;
 
 /**
- * Checks if a path is a valid path for the current OS
+ * Checks if a path is valid for the current OS
  */
 export function isValidPath(pathToCheck: string): boolean;
 
@@ -78,6 +78,11 @@ export function getPathSeparator(): string;
 export const isWindows: boolean;
 
 /**
- * Flag indicating if we're running in Node.js environment
+ * Flag indicating if we're running in a macOS environment
+ */
+export const isMac: boolean;
+
+/**
+ * Flag indicating if we're running in a Node.js environment
  */
 export const isNode: boolean; 

@@ -9,7 +9,7 @@ The path utilities in this module aim to solve several common challenges when wo
 1. **Cross-platform compatibility** - Handle path differences between Windows, macOS, and Linux
 2. **Consistent normalization** - Normalize paths in a predictable way for comparison and storage
 3. **Unified interface** - Provide the same API for both Node.js and browser environments
-4. **Edge case handling** - Correctly manage special cases like UNC paths, drive letters, etc.
+4. **Edge case handling** - Correctly manage special cases like UNC paths, drive letters, macOS app bundles, and resource forks
 
 ## Components
 
@@ -27,7 +27,7 @@ The path utilities in this module aim to solve several common challenges when wo
 | `dirname` | Extracts everything except the last part of a path string |
 | `join` | Joins multiple path segments together |
 | `extname` | Retrieves the file extension from a path |
-| `arePathsEqual` | Compares two paths for equality, considering OS-specific case sensitivity |
+| `arePathsEqual` | Compares paths for equality, considering OS-specific case sensitivity |
 | `isSubPath` | Checks if one path is a subpath of another |
 | `safePathJoin` | Joins paths safely across different platforms |
 | `safeRelativePath` | Calculates the relative path between two paths |
@@ -40,7 +40,17 @@ The path utilities in this module aim to solve several common challenges when wo
 The module automatically detects the current environment and adjusts behavior accordingly:
 
 - `isWindows` - Boolean flag indicating if running in a Windows environment
+- `isMac` - Boolean flag indicating if running in a macOS environment
 - `isNode` - Boolean flag indicating if running in a Node.js environment
+
+## macOS-Specific Features
+
+The utilities have several macOS-specific enhancements:
+
+1. **Resource fork handling** - Properly normalizes paths containing `.namedfork` components
+2. **Application bundles** - Special handling for `.app` bundle paths
+3. **Case sensitivity** - Adapts to macOS file system case-insensitivity while maintaining compatibility with case-sensitive configurations
+4. **Platform detection** - Correctly identifies macOS in both Node.js and browser environments
 
 ## Usage
 
@@ -51,7 +61,8 @@ const {
   normalizePath, 
   basename, 
   join, 
-  isWindows 
+  isWindows,
+  isMac 
 } = require('./shared/path-utils');
 
 // Normalize a file path
@@ -66,9 +77,13 @@ const fileBasename = basename('/path/to/file.txt');
 const joinedPath = join('path', 'to', 'file.txt');
 // Result: 'path/to/file.txt'
 
-// Check if running on Windows
+// Check platform
 if (isWindows) {
   console.log('Running on Windows');
+} else if (isMac) {
+  console.log('Running on macOS');
+} else {
+  console.log('Running on Linux or other platform');
 }
 ```
 
@@ -79,7 +94,8 @@ import {
   normalizePath, 
   basename, 
   join, 
-  isWindows 
+  isWindows,
+  isMac 
 } from '../../shared/path-utils';
 
 // TypeScript usage is identical to JavaScript usage
