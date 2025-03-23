@@ -898,6 +898,19 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           return null;
         }
         
+        // Check if directory should be ignored first - prioritize ignores over anything else
+        try {
+          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
+              relativePath && relativePath.trim() !== '' && 
+              ignoreFilter.ignores(relativePath)) {
+            console.log(`Skipping ignored directory: ${relativePath}`);
+            totalDirectoriesProcessed++;
+            return null; // Skip ignored directories completely without any further processing
+          }
+        } catch (ignoreErr) {
+          console.error(`Error in ignore filter for directory ${fullPath}:`, ignoreErr);
+        }
+        
         let directoryResults = [];
         
         // Add the directory itself to the results
@@ -932,28 +945,21 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           });
         }
         
-        // Only process if not ignored
+        // Process contents if not in an ignored location
         try {
-          // Safely check if directory should be ignored
-          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
-              relativePath && relativePath.trim() !== '' && 
-              !ignoreFilter.ignores(relativePath)) {
-            // Skip certain directories that tend to be problematic
-            if ((depth >= 5 && !isDeepScanEnabled)) {
-              // For these, just add the directory but don't process contents
-              console.log(`Skipping deep traversal of ${relativePath} at depth ${depth}`);
-            } else {
-              const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false);
-              if (!isLoadingDirectory) return null;
-              
-              if (Array.isArray(subResults)) {
-                directoryResults = directoryResults.concat(subResults);
-              } else {
-                console.warn(`Non-array result from recursive call for ${fullPath}:`, subResults);
-              }
-            }
+          // Skip certain directories that tend to be problematic
+          if ((depth >= 5 && !isDeepScanEnabled)) {
+            // For these, just add the directory but don't process contents
+            console.log(`Skipping deep traversal of ${relativePath} at depth ${depth}`);
           } else {
-            console.log(`Skipping ignored directory: ${relativePath}`);
+            const subResults = await readFilesRecursively(fullPath, rootDir, ignoreFilter, window, false);
+            if (!isLoadingDirectory) return null;
+            
+            if (Array.isArray(subResults)) {
+              directoryResults = directoryResults.concat(subResults);
+            } else {
+              console.warn(`Non-array result from recursive call for ${fullPath}:`, subResults);
+            }
           }
         } catch (subDirErr) {
           console.error(`Error processing subdirectory ${fullPath}:`, subDirErr);
@@ -998,13 +1004,14 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           return null;
         }
 
-        // Safely check if file should be ignored
+        // Safely check if file should be ignored - do this check first before any file processing
         try {
           if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
               relativePath && relativePath.trim() !== '' && 
               ignoreFilter.ignores(relativePath)) {
             console.log(`Skipping ignored file: ${relativePath}`);
-            return null; // Skip ignored files completely
+            totalFilesProcessed++;
+            return null; // Skip ignored files completely without any further processing
           }
         } catch (ignoreErr) {
           console.error(`Error in ignore filter for ${fullPath}:`, ignoreErr);
@@ -1014,7 +1021,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           const stats = await fs.promises.stat(fullPath);
           if (!isLoadingDirectory) return null;
           
-          // Check if file is binary based on extension
+          // Now check if file is binary based on extension
           const isBin = isBinaryFile(fullPath);
           
           if (stats.size > MAX_FILE_SIZE) {
@@ -1209,7 +1216,15 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         console.log("Starting directory scan, isLoadingDirectory =", isLoadingDirectory);
         
         // Initialize the gitignore filter once to avoid re-reading it for each directory
+        // This is important to do first as it determines what files we'll skip entirely
+        console.log("Initializing gitignore filters before file traversal");
         const ignoreFilter = loadGitignore(folderPath);
+        
+        // Log some info about the ignore filter to help with debugging
+        console.log("Ignore filter initialized, proceeding with directory traversal");
+        console.log("Note: Files in ignored directories will be completely skipped");
+        console.log("      Binary files in non-ignored directories will be included but tagged as binary");
+        console.log("      Priority: 1. Directory ignores, 2. File ignores, 3. Binary detection");
         
         // Await the result of readFilesRecursively
         const files = await readFilesRecursively(folderPath, folderPath, ignoreFilter, window, true);
@@ -1235,6 +1250,9 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
           // Normalize the path to use forward slashes consistently
           const normalizedPath = normalizePath(file.path);
           
+          // Check if we should exclude this file by default
+          const shouldExclude = shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
+          
           // Create a clean file object
           return {
             name: file.name ? String(file.name) : "",
@@ -1250,7 +1268,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             isSkipped: Boolean(file.isSkipped),
             error: file.error ? String(file.error) : null,
             fileType: file.fileType ? String(file.fileType) : null,
-            excludedByDefault: shouldExcludeByDefault(normalizedPath, normalizePath(folderPath)), // Also normalize folder path
+            excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault
             isDirectory: Boolean(file.isDirectory)
           };
         });
@@ -1355,12 +1373,6 @@ function shouldExcludeByDefault(filePath, rootDir) {
     if (!relativePathNormalized || relativePathNormalized === '') {
       console.log("Root directory or empty path detected in shouldExcludeByDefault");
       return false; // Don't exclude the root directory itself
-    }
-    
-    // First check if it's a binary file by extension
-    if (isBinaryFile(filePath)) {
-      // Binary files should be shown but tagged as binary, not excluded completely
-      return false;
     }
     
     // Check for common large/generated files that should be excluded
