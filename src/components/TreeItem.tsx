@@ -81,17 +81,29 @@ const TreeItem = ({
 
   // Check if file is binary or otherwise unselectable
   const isDisabled = fileData ? fileData.isBinary || fileData.isSkipped : false;
+  const isBinary = fileData?.isBinary || false;
+  const isSkipped = fileData?.isSkipped || false;
 
   // Check if the file is excluded by default (but still selectable)
   const isExcludedByDefault = fileData?.excludedByDefault || false;
+
+  // Check if this is a directory containing binary files (used for styling)
+  const hasBinaryFiles = type === "directory" && allFiles && 
+    allFiles.some(file => 
+      file.path && 
+      !file.isDirectory && 
+      file.isBinary && 
+      isSubPath(path, file.path)
+    );
 
   return (
     <div
       className={`tree-item ${isSelected ? "selected" : ""} ${
         isExcludedByDefault ? "excluded-by-default" : ""
-      }`}
+      } ${isBinary ? "has-binary" : ""} ${hasBinaryFiles ? "contains-binary" : ""}`}
       style={{ marginLeft: `${level * 16}px` }}
       onClick={handleItemClick}
+      data-level={level}
     >
       {/* Expand/collapse arrow for directories */}
       {type === "directory" && (
@@ -116,6 +128,7 @@ const TreeItem = ({
         onChange={handleCheckboxChange}
         disabled={isDisabled}
         onClick={(e) => e.stopPropagation()}
+        title={isBinary ? "Binary files cannot be selected" : isSkipped ? "Skipped files cannot be selected" : ""}
       />
 
       {/* Item content (icon, name, and metadata) */}
@@ -133,13 +146,21 @@ const TreeItem = ({
           </span>
         )}
 
-        {/* Show badge for unselectable files */}
-        {isDisabled && fileData && (
-          <span className="tree-item-badge">
-            {fileData.isBinary ? "Binary" : "Skipped"}
+        {/* Show badge for binary files */}
+        {isBinary && (
+          <span className="tree-item-badge binary">
+            Binary
           </span>
         )}
 
+        {/* Show badge for skipped files */}
+        {isSkipped && !isBinary && (
+          <span className="tree-item-badge skipped">
+            Skipped
+          </span>
+        )}
+
+        {/* Show badge for excluded files */}
         {!isDisabled && isExcludedByDefault && (
           <span className="tree-item-badge excluded">Excluded</span>
         )}
