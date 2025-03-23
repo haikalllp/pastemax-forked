@@ -7,12 +7,24 @@
  * React/browser-specific functionality.
  */
 
+// Try to import the shared path utilities directly if not already loaded
+let pathUtilsImport: any;
+try {
+  pathUtilsImport = require('../../shared/path-utils.js');
+} catch (e) {
+  // Silently ignore import error, we'll check global scope next
+  pathUtilsImport = null;
+}
+
 // Determine if pathUtils is available from a global or from an import
 // This handles both the CommonJS and browser environments
 let pathUtilsModule: any;
 
-// Check if we're in a browser environment where pathUtils might be globally defined
-if (typeof window !== 'undefined' && (window as any).pathUtils) {
+// First try our direct import
+if (pathUtilsImport) {
+  pathUtilsModule = pathUtilsImport;
+// Then check if already globally available
+} else if (typeof window !== 'undefined' && (window as any).pathUtils) {
   pathUtilsModule = (window as any).pathUtils;
 } else if (typeof self !== 'undefined' && (self as any).pathUtils) {
   pathUtilsModule = (self as any).pathUtils;

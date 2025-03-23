@@ -1,6 +1,7 @@
 import React, {
   useRef,
   useEffect,
+  memo
 } from "react";
 import { TreeItemProps, TreeNode, FileData } from "../types/FileTypes";
 import { ChevronRight, File, Folder } from "lucide-react";
@@ -45,72 +46,13 @@ const TreeItem = ({
     arePathsEqual(selectedPath, path)
   );
 
-  const isDirectorySelected = (item: FileData, selectedFiles: string[], allFiles: FileData[]): boolean => {
-    // If no files are selected, return false
-    if (selectedFiles.length === 0) {
-      return false;
-    }
-
-    // For all folders, get all files in this folder and subfolders
-    const allSelectableFiles = getAllFilesInFolder(item, allFiles);
-    
-    // If there are no selectable files, it can't be selected
-    if (allSelectableFiles.length === 0) {
-      return false;
-    }
-    
-    // Check if all eligible files are selected
-    return allSelectableFiles.every(file => selectedFiles.includes(file.path));
-  };
-
-  // Returns all files (not directories) in this folder and subfolders that are selectable
-  const getAllFilesInFolder = (item: FileData, allFiles: FileData[]): FileData[] => {
-    if (!item || !item.path) {
-      return [];
-    }
-    
-    const itemPath = normalizePath(item.path);
-    
-    return allFiles.filter(file => {
-      // Skip directories, binary files, etc.
-      if (!file || !file.path || file.isDirectory || file.isBinary || file.isSkipped || file.excludedByDefault) {
-        return false;
-      }
-      
-      const filePath = normalizePath(file.path);
-      
-      // Check if this file is in the folder or its subfolders
-      return arePathsEqual(filePath, itemPath) || isSubPath(itemPath, filePath);
-    });
-  };
-
-  // Returns only direct child files (not directories) that are selectable
-  // This function is no longer used as we now use getAllFilesInFolder for all selection operations
-  const isDirectoryPartiallySelected = (item: FileData, selectedFiles: string[], allFiles: FileData[]): boolean => {
-    // If no files are selected, return false
-    if (selectedFiles.length === 0) {
-      return false;
-    }
-    
-    // For all folders, get all files in this folder and subfolders
-    const allSelectableFiles = getAllFilesInFolder(item, allFiles);
-    
-    // If no selectable files, it can't be partially selected
-    if (allSelectableFiles.length === 0) {
-      return false;
-    }
-    
-    // Check if any of the files are selected but not all of them
-    const someSelected = allSelectableFiles.some(file => selectedFiles.includes(file.path));
-    const allSelected = allSelectableFiles.every(file => selectedFiles.includes(file.path));
-    
-    return someSelected && !allSelected;
-  };
-
   // Update the indeterminate state manually whenever it changes
   useEffect(() => {
     if (checkboxRef.current && fileData) {
-      checkboxRef.current.indeterminate = isDirectoryPartiallySelected(fileData, selectedFiles, allFiles);
+      const isPartiallySelected = isDirectoryPartiallySelected(fileData, selectedFiles, allFiles);
+      if (checkboxRef.current.indeterminate !== isPartiallySelected) {
+        checkboxRef.current.indeterminate = isPartiallySelected;
+      }
     }
   }, [fileData, selectedFiles, allFiles]);
 
@@ -206,4 +148,69 @@ const TreeItem = ({
   );
 };
 
-export default TreeItem; 
+// These helper functions are moved outside the component to prevent recreation on each render
+
+// Returns whether all files in this directory are selected
+const isDirectorySelected = (item: FileData, selectedFiles: string[], allFiles: FileData[]): boolean => {
+  // If no files are selected, return false
+  if (selectedFiles.length === 0) {
+    return false;
+  }
+
+  // For all folders, get all files in this folder and subfolders
+  const allSelectableFiles = getAllFilesInFolder(item, allFiles);
+  
+  // If there are no selectable files, it can't be selected
+  if (allSelectableFiles.length === 0) {
+    return false;
+  }
+  
+  // Check if all eligible files are selected
+  return allSelectableFiles.every(file => selectedFiles.includes(file.path));
+};
+
+// Returns all files (not directories) in this folder and subfolders that are selectable
+const getAllFilesInFolder = (item: FileData, allFiles: FileData[]): FileData[] => {
+  if (!item || !item.path) {
+    return [];
+  }
+  
+  const itemPath = normalizePath(item.path);
+  
+  return allFiles.filter(file => {
+    // Skip directories, binary files, etc.
+    if (!file || !file.path || file.isDirectory || file.isBinary || file.isSkipped || file.excludedByDefault) {
+      return false;
+    }
+    
+    const filePath = normalizePath(file.path);
+    
+    // Check if this file is in the folder or its subfolders
+    return arePathsEqual(filePath, itemPath) || isSubPath(itemPath, filePath);
+  });
+};
+
+// Returns whether some but not all files in this directory are selected
+const isDirectoryPartiallySelected = (item: FileData, selectedFiles: string[], allFiles: FileData[]): boolean => {
+  // If no files are selected, return false
+  if (selectedFiles.length === 0) {
+    return false;
+  }
+  
+  // For all folders, get all files in this folder and subfolders
+  const allSelectableFiles = getAllFilesInFolder(item, allFiles);
+  
+  // If no selectable files, it can't be partially selected
+  if (allSelectableFiles.length === 0) {
+    return false;
+  }
+  
+  // Check if any of the files are selected but not all of them
+  const someSelected = allSelectableFiles.some(file => selectedFiles.includes(file.path));
+  const allSelected = allSelectableFiles.every(file => selectedFiles.includes(file.path));
+  
+  return someSelected && !allSelected;
+};
+
+// Memo the component to prevent unnecessary re-renders
+export default memo(TreeItem); 

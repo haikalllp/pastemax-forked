@@ -174,7 +174,9 @@ const Sidebar = ({
             type: "directory",
             level: 0,
             children: [],
-            isExpanded: true, // Default expanded state, will be updated in the next effect
+            isExpanded: expandedNodes[`node-${normalizedSelectedFolder}`] !== undefined 
+              ? expandedNodes[`node-${normalizedSelectedFolder}`] 
+              : true,
             fileData: rootFolderItem
           };
           
@@ -281,11 +283,33 @@ const Sidebar = ({
           return a.name.localeCompare(b.name);
         });
 
-        // Always set the tree regardless of processing state
-        setFileTree(sortedTree);
+        // Apply expanded state directly during tree creation rather than in a separate effect
+        const applyExpandedState = (nodes: TreeNode[]): TreeNode[] => {
+          return nodes.map((node: TreeNode): TreeNode => {
+            if (node.type === "directory") {
+              const isExpanded =
+                expandedNodes[node.id] !== undefined
+                ? expandedNodes[node.id]
+                : true; // Default to expanded if not in state
+  
+              return {
+                ...node,
+                isExpanded,
+                children: node.children ? applyExpandedState(node.children) : [],
+              };
+            }
+            return node;
+          });
+        };
+
+        // Apply expanded state and sort in one operation
+        const processedTree = applyExpandedState(sortedTree);
+        
+        // Set the fully processed tree only once
+        setFileTree(processedTree);
         setIsTreeBuildingComplete(true);
         
-        console.log("Tree building complete, nodes:", sortedTree.length);
+        console.log("Tree building complete, nodes:", processedTree.length);
       } catch (err) {
         console.error("Error building file tree:", err);
         // On error, try to build a simple flat tree as a fallback
@@ -427,36 +451,10 @@ const Sidebar = ({
       });
     };
 
-    // Use a timeout to not block UI
-    const buildTreeTimeoutId = setTimeout(buildTree, 0);
+    // Use a timeout to not block UI, but with a longer delay to prevent rapid re-renders
+    const buildTreeTimeoutId = setTimeout(buildTree, 50);
     return () => clearTimeout(buildTreeTimeoutId);
-  }, [allFiles, selectedFolder]);
-
-  // Apply expanded state as a separate operation when expandedNodes change
-  useEffect(() => {
-    if (fileTree.length === 0 || !isTreeBuildingComplete) return;
-
-    // Function to apply expanded state to nodes
-    const applyExpandedState = (nodes: TreeNode[]): TreeNode[] => {
-      return nodes.map((node: TreeNode): TreeNode => {
-        if (node.type === "directory") {
-          const isExpanded =
-            expandedNodes[node.id] !== undefined
-              ? expandedNodes[node.id]
-              : true; // Default to expanded if not in state
-
-          return {
-            ...node,
-            isExpanded,
-            children: node.children ? applyExpandedState(node.children) : [],
-          };
-        }
-        return node;
-      });
-    };
-
-    setFileTree((prevTree: TreeNode[]) => applyExpandedState(prevTree));
-  }, [expandedNodes, fileTree.length, isTreeBuildingComplete]);
+  }, [allFiles, selectedFolder, expandedNodes]);
 
   // Flatten the tree for rendering with proper indentation
   const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
