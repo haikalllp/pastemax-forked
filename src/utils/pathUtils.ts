@@ -23,6 +23,28 @@ export function normalizePath(filePath: string): string {
 }
 
 /**
+ * Makes a path relative by removing drive letters and leading slashes
+ * This is particularly useful for gitignore pattern matching
+ * 
+ * @param filePath The file path to make relative
+ * @returns The path without drive letter and leading slashes
+ */
+export function makeRelativePath(filePath: string): string {
+  if (!filePath) return filePath;
+  
+  // Normalize first
+  let normalizedPath = normalizePath(filePath);
+  
+  // Remove drive letter (e.g., C:/) if present (Windows-specific)
+  normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
+  
+  // Remove leading slash if present
+  normalizedPath = normalizedPath.replace(/^\//, '');
+  
+  return normalizedPath;
+}
+
+/**
  * Detects the operating system
  * 
  * @returns The detected operating system ('windows', 'mac', 'linux', or 'unknown')
@@ -64,16 +86,17 @@ export function arePathsEqual(path1: string, path2: string): boolean {
   if (!path1 && !path2) return true;
   if (!path1 || !path2) return false;
   
-  const normalizedPath1 = normalizePath(path1);
-  const normalizedPath2 = normalizePath(path2);
+  // Make both paths relative to handle drive letter differences
+  const relativePath1 = makeRelativePath(path1);
+  const relativePath2 = makeRelativePath(path2);
   
   // On Windows, paths are case-insensitive
   if (isWindows()) {
-    return normalizedPath1.toLowerCase() === normalizedPath2.toLowerCase();
+    return relativePath1.toLowerCase() === relativePath2.toLowerCase();
   }
   
   // On other systems (Mac, Linux), paths are case-sensitive
-  return normalizedPath1 === normalizedPath2;
+  return relativePath1 === relativePath2;
 }
 
 /**
@@ -128,9 +151,8 @@ export function dirname(path: string | null | undefined): string {
 export function join(...segments: (string | null | undefined)[]): string {
   return segments
     .filter(Boolean)
-    .map((seg) => String(seg))
-    .join("/")
-    .replace(/\/+/g, "/"); // Replace multiple slashes with a single one
+    .map((seg) => String(seg).replace(/^\/|\/$/g, '')) // Remove leading/trailing slashes
+    .join("/");
 }
 
 /**
@@ -158,8 +180,9 @@ export function isSubPath(parent: string, child: string): boolean {
   // Handle null/undefined cases
   if (!parent || !child) return false;
   
-  const normalizedParent = normalizePath(parent);
-  const normalizedChild = normalizePath(child);
+  // Make both paths relative to handle drive letter differences
+  const normalizedParent = makeRelativePath(parent);
+  const normalizedChild = makeRelativePath(child);
   
   // Ensure parent path ends with a slash for proper subpath checking
   // This prevents '/foo/bar' from matching '/foo/bart'
@@ -188,7 +211,7 @@ export function generateAsciiFileTree(files: { path: string }[], rootPath: strin
   if (!files.length) return "No files selected.";
 
   // Normalize the root path for consistent path handling
-  const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/\/$/, "");
+  const normalizedRoot = normalizePath(rootPath).replace(/\/$/, "");
   
   // Create a tree structure from the file paths
   interface TreeNode {
@@ -201,10 +224,12 @@ export function generateAsciiFileTree(files: { path: string }[], rootPath: strin
   
   // Insert a file path into the tree
   const insertPath = (filePath: string, node: TreeNode) => {
-    const normalizedPath = filePath.replace(/\\/g, "/");
-    if (!normalizedPath.startsWith(normalizedRoot)) return;
+    const normalizedPath = normalizePath(filePath);
     
-    const relativePath = normalizedPath.substring(normalizedRoot.length).replace(/^\//, "");
+    // For cross-platform compatibility, use the relative path matching logic
+    if (!isSubPath(normalizedRoot, normalizedPath)) return;
+    
+    const relativePath = makeRelativePath(normalizedPath).substring(makeRelativePath(normalizedRoot).length).replace(/^\//, "");
     if (!relativePath) return;
     
     const pathParts = relativePath.split("/");
@@ -212,6 +237,8 @@ export function generateAsciiFileTree(files: { path: string }[], rootPath: strin
     
     for (let i = 0; i < pathParts.length; i++) {
       const part = pathParts[i];
+      if (!part) continue; // Skip empty parts
+      
       const isFile = i === pathParts.length - 1;
       
       if (!currentNode.children[part]) {

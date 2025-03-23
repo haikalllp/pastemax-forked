@@ -36,6 +36,28 @@ function normalizePath(filePath) {
 }
 
 /**
+ * Makes a path relative by removing drive letters and leading slashes
+ * This is particularly useful for gitignore pattern matching
+ * 
+ * @param {string} filePath - The file path to make relative
+ * @returns {string} - The path without drive letter and leading slashes
+ */
+function makeRelativePath(filePath) {
+  if (!filePath) return filePath;
+  
+  // Normalize first
+  let normalizedPath = normalizePath(filePath);
+  
+  // Remove drive letter (e.g., C:/) if present (Windows-specific)
+  normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
+  
+  // Remove leading slash if present
+  normalizedPath = normalizedPath.replace(/^\//, '');
+  
+  return normalizedPath;
+}
+
+/**
  * Get the platform-specific path separator
  */
 function getPathSeparator() {
@@ -550,9 +572,10 @@ function loadGitignore(rootDir) {
     }
     
     try {
-      // Normalize path before checking it against patterns
-      const normalizedPath = normalizePath(path);
-      return originalIgnores.call(ig, normalizedPath);
+      // Make path relative using our utility function
+      const relativePath = makeRelativePath(path);
+      
+      return originalIgnores.call(ig, relativePath);
     } catch (err) {
       console.error(`Error in ignores for path '${path}':`, err);
       return false;
@@ -1006,9 +1029,22 @@ function shouldExcludeByDefault(filePath, rootDir) {
       rootDir = rootDir.toLowerCase();
     }
 
+    // Check if the paths are on the same drive (Windows)
+    if (process.platform === 'win32') {
+      const fileDrive = filePath.slice(0, 2).toLowerCase();
+      const rootDrive = rootDir.slice(0, 2).toLowerCase();
+      
+      if (fileDrive !== rootDrive) {
+        console.log(`File on different drive: ${filePath} vs ${rootDir}`);
+        return false; // Different drives, can't be excluded by relative patterns
+      }
+    }
+
+    // Calculate the relative path
     // Use path.relative for proper cross-platform path handling
-    const relativePath = path.relative(rootDir, filePath);
-    const relativePathNormalized = normalizePath(relativePath);
+    let relativePath = path.relative(rootDir, filePath);
+    // Then normalize to forward slashes and make it a proper relative path
+    const relativePathNormalized = makeRelativePath(relativePath);
     
     // Handle empty relative paths (root directory case)
     if (!relativePathNormalized || relativePathNormalized === '') {
@@ -1016,14 +1052,22 @@ function shouldExcludeByDefault(filePath, rootDir) {
       return false; // Don't exclude the root directory itself
     }
     
+    // Debug log
+    console.log(`Checking if ${relativePathNormalized} should be excluded`);
+    
     // Load gitignore patterns for this root dir
     const gitignoreFilter = loadGitignore(rootDir);
     
     // Check if the file is ignored by gitignore patterns
-    if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function' &&
-        gitignoreFilter.ignores(relativePathNormalized)) {
-      console.log(`File excluded by gitignore: ${relativePathNormalized}`);
-      return true;
+    if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function') {
+      try {
+        if (gitignoreFilter.ignores(relativePathNormalized)) {
+          console.log(`File excluded by gitignore: ${relativePathNormalized}`);
+          return true;
+        }
+      } catch (ignoreErr) {
+        console.error(`Error checking gitignore for ${relativePathNormalized}:`, ignoreErr);
+      }
     }
     
     // Use the ignore package to do glob pattern matching for default excluded files

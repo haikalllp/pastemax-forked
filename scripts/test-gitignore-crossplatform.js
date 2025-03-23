@@ -36,6 +36,22 @@ function normalizePath(path) {
   return path.replace(/\\/g, '/');
 }
 
+// Function to make paths relative by removing drive letters and leading slashes
+function makeRelativePath(path) {
+  if (!path) return path;
+  
+  // Normalize first
+  let normalizedPath = normalizePath(path);
+  
+  // Remove drive letter (e.g., C:/) if present
+  normalizedPath = normalizedPath.replace(/^[a-zA-Z]:\//, '');
+  
+  // Remove leading slash if present
+  normalizedPath = normalizedPath.replace(/^\//, '');
+  
+  return normalizedPath;
+}
+
 // Detect current platform
 console.log(`Current platform: ${os.platform()}`);
 console.log(`Path separator: ${path.sep}\n`);
@@ -48,9 +64,10 @@ const originalIgnores = ig.ignores;
 ig.ignores = (testPath) => {
   if (!testPath) return false;
   
-  // Normalize the path for consistent handling
-  const normalizedPath = normalizePath(testPath);
-  const result = originalIgnores.call(ig, normalizedPath);
+  // Make the path relative and normalize it
+  const relativePath = makeRelativePath(testPath);
+  const result = originalIgnores.call(ig, relativePath);
+  
   return result;
 };
 
@@ -103,6 +120,7 @@ testCases.forEach(testPath => {
   const isIgnored = ig.ignores(testPath);
   console.log(`Path: ${testPath}`);
   console.log(`  Normalized: ${normalizePath(testPath)}`);
+  console.log(`  Relative: ${makeRelativePath(testPath)}`);
   console.log(`  Result: ${isIgnored ? 'EXCLUDED' : 'INCLUDED'}`);
   console.log('---------------------------------------------');
 });
@@ -125,6 +143,7 @@ if (os.platform() === 'win32') {
     const isIgnored = ig.ignores(testPath);
     console.log(`Path: ${testPath}`);
     console.log(`  Normalized: ${normalizePath(testPath)}`);
+    console.log(`  Relative: ${makeRelativePath(testPath)}`);
     console.log(`  Result: ${isIgnored ? 'EXCLUDED' : 'INCLUDED'}`);
     console.log('---------------------------------------------');
   });
@@ -134,11 +153,12 @@ if (os.platform() === 'win32') {
 console.log('\nRelative path tests:');
 console.log('---------------------------------------------');
 
-const baseDir = '/project';
+// Using paths without drive letters for cross-platform compatibility
+const baseDir = 'project';
 const testFiles = [
-  '/project/dist/main.js',
-  '/project/src/App.js',
-  '/project/node_modules/react.js'
+  'project/dist/main.js',
+  'project/src/App.js',
+  'project/node_modules/react.js'
 ];
 
 testFiles.forEach(fullPath => {
