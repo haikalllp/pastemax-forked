@@ -280,67 +280,76 @@ const Sidebar = ({
 
     // Helper function to build children tree under a parent node
     const buildChildrenTree = (parentNode: TreeNode, files: any[], parentPath: string) => {
-      try {
-        // Find direct children of this parent
-        const childFiles = files.filter(file => {
-          if (!file || !file.path) {
-            console.warn("Found invalid file entry in buildChildrenTree");
-            return false;
-          }
-          if (arePathsEqual(file.path, parentPath)) return false; // Skip the parent itself
-          if (file.excludedByDefault) return false; // Skip excluded files
-          
-          const normalizedPath = normalizePath(file.path);
-          return isSubPath(parentPath, normalizedPath) && 
-                 // Only direct children (one level down)
-                 normalizedPath.substring(parentPath.length + 1).split('/').length === 1;
-        });
+      // Get all files that are direct children of the parent path
+      const childFiles = files.filter(file => {
+        // Skip files without a path
+        if (!file.path) return false;
         
-        console.log(`Building children tree for ${parentNode.name}, found ${childFiles.length} direct children`);
+        // Skip files that are excluded by gitignore or default exclusions
+        if (file.excludedByDefault) return false;
         
-        // Sort children (directories first, then files)
-        const sortedChildren = childFiles.sort((a: any, b: any) => {
-          // Make sure we treat isDirectory consistently
-          const aIsDir = Boolean(a.isDirectory);
-          const bIsDir = Boolean(b.isDirectory);
-          
-          if (aIsDir && !bIsDir) return -1;
-          if (!aIsDir && bIsDir) return 1;
-          return a.name.localeCompare(b.name);
-        });
+        const normalizedFilePath = normalizePath(file.path);
+        const normalizedParentPath = normalizePath(parentPath);
         
-        // Create tree nodes for children
-        parentNode.children = sortedChildren.map((file: any) => {
-          if (!file || !file.path) {
-            console.warn("Skipping invalid file in children map");
-            return null;
-          }
-          
-          const nodePath = normalizePath(file.path);
-          const nodeId = `node-${nodePath}`;
-          const isDirectory = Boolean(file.isDirectory);
-          
-          const node: TreeNode = {
-            id: nodeId,
-            name: file.name || basename(nodePath),
-            path: nodePath,
-            type: isDirectory ? "directory" : "file",
-            level: parentNode.level + 1,
-            fileData: file,
-            isExpanded: expandedNodes[nodeId] !== undefined ? expandedNodes[nodeId] : true // Default to expanded
-          };
-          
-          if (isDirectory) {
-            node.children = [];
-            buildChildrenTree(node, files, nodePath);
-          }
-          
-          return node;
-        }).filter(node => node !== null) as TreeNode[]; // Filter out null values
-      } catch (err) {
-        console.error(`Error building children tree for ${parentNode.name}:`, err);
-        parentNode.children = []; // Ensure we have a valid array even on error
-      }
+        // Skip the parent folder itself
+        if (arePathsEqual(normalizedFilePath, normalizedParentPath)) return false;
+        
+        // Check if this file is a direct child of the parent
+        // We need to handle both Unix and Windows path separators
+        if (isSubPath(normalizedParentPath, normalizedFilePath)) {
+          // Get the relative path after the parent path
+          const relPath = normalizedFilePath.substring(normalizedParentPath.length);
+          // Remove leading slash if present
+          const cleanRelPath = relPath.startsWith('/') ? relPath.substring(1) : relPath;
+          // Count path segments to ensure it's a direct child (only one level deep)
+          const segments = cleanRelPath.split('/').filter(Boolean);
+          return segments.length === 1;
+        }
+        
+        return false;
+      });
+      
+      console.log(`Building children tree for ${parentNode.name}, found ${childFiles.length} direct children`);
+      
+      // Sort children (directories first, then files)
+      const sortedChildren = childFiles.sort((a: any, b: any) => {
+        // Make sure we treat isDirectory consistently
+        const aIsDir = Boolean(a.isDirectory);
+        const bIsDir = Boolean(b.isDirectory);
+        
+        if (aIsDir && !bIsDir) return -1;
+        if (!aIsDir && bIsDir) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      // Create tree nodes for children
+      parentNode.children = sortedChildren.map((file: any) => {
+        if (!file || !file.path) {
+          console.warn("Skipping invalid file in children map");
+          return null;
+        }
+        
+        const nodePath = normalizePath(file.path);
+        const nodeId = `node-${nodePath}`;
+        const isDirectory = Boolean(file.isDirectory);
+        
+        const node: TreeNode = {
+          id: nodeId,
+          name: file.name || basename(nodePath),
+          path: nodePath,
+          type: isDirectory ? "directory" : "file",
+          level: parentNode.level + 1,
+          fileData: file,
+          isExpanded: expandedNodes[nodeId] !== undefined ? expandedNodes[nodeId] : true // Default to expanded
+        };
+        
+        if (isDirectory) {
+          node.children = [];
+          buildChildrenTree(node, files, nodePath);
+        }
+        
+        return node;
+      }).filter(node => node !== null) as TreeNode[]; // Filter out null values
     };
 
     // Helper function to convert the file map to TreeNode array
@@ -459,7 +468,7 @@ const Sidebar = ({
       
       // Check if the node name matches
       if (node.name.toLowerCase().includes(lowerTerm)) return true;
-
+      
       // If it's a file, we're done
       if (node.type === "file") return false;
 
@@ -467,10 +476,10 @@ const Sidebar = ({
       if (node.children) {
         return node.children.some(nodeMatches);
       }
-
+      
       return false;
     };
-
+    
     // Filter the nodes
     return nodes.filter(nodeMatches).map((node) => {
       // If it's a directory, also filter its children

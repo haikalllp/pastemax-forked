@@ -15,6 +15,8 @@
     "test-build:mac": "node scripts/test-local-build.js mac",
     "test-build:win": "node scripts/test-local-build.js win",
     "test-build:linux": "node scripts/test-local-build.js linux",
+    "test-gitignore": "node scripts/test-gitignore.js",
+    "test-gitignore:cross": "node scripts/test-gitignore-crossplatform.js",
     "debug-gh-release": "cross-env-shell \"git tag debug-v$(node -e \"console.log(new Date().toISOString().replace(/[:.]/g, '').split('T').join(''));\")\" && git push origin --tags",
     "package": "npm run clean:dist && cross-env NODE_ENV=production vite build && electron-builder --publish=never",
     "package:mac": "npm run clean:dist && cross-env NODE_ENV=production vite build && electron-builder --mac --publish=never",

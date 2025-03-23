@@ -49,11 +49,15 @@ const TreeItem = ({
 
   // Returns all files (not directories) in this folder and subfolders that are selectable
   const getAllFilesInFolder = (item: FileData, allFiles: FileData[]): FileData[] => {
+    if (!item || !item.path) {
+      return [];
+    }
+    
     const itemPath = normalizePath(item.path);
     
     return allFiles.filter(file => {
       // Skip directories, binary files, etc.
-      if (file.isDirectory || file.isBinary || file.isSkipped || file.excludedByDefault) {
+      if (!file || !file.path || file.isDirectory || file.isBinary || file.isSkipped || file.excludedByDefault) {
         return false;
       }
       

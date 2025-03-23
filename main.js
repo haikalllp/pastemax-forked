@@ -499,8 +499,10 @@ function loadGitignore(rootDir) {
           .split(/\r?\n/)
           .map(pattern => pattern.trim())
           .filter(pattern => pattern && !pattern.startsWith('#'))
+          // Ensure forward slashes in patterns for cross-platform compatibility
           .map(pattern => normalizePath(pattern));
 
+        console.log(`Loaded ${normalizedPatterns.length} patterns from .gitignore`);
         ig.add(normalizedPatterns);
       } catch (err) {
         console.error("Error reading .gitignore:", err);
@@ -508,7 +510,7 @@ function loadGitignore(rootDir) {
     }
 
     // Add some default ignores that are common
-    ig.add([
+    const defaultIgnores = [
       ".git",
       "node_modules",
       ".DS_Store",
@@ -522,12 +524,16 @@ function loadGitignore(rootDir) {
       "dist",
       "build",
       "out"
-    ]);
+    ];
+
+    ig.add(defaultIgnores);
+    console.log(`Added ${defaultIgnores.length} default ignore patterns`);
 
     // Normalize and add the excludedFiles patterns
     if (Array.isArray(excludedFiles)) {
       const normalizedExcludedFiles = excludedFiles.map(pattern => normalizePath(pattern));
       ig.add(normalizedExcludedFiles);
+      console.log(`Added ${normalizedExcludedFiles.length} patterns from excluded-files.js`);
     } else {
       console.warn("excludedFiles is not an array, skipping");
     }
@@ -535,7 +541,7 @@ function loadGitignore(rootDir) {
     console.error("Error configuring ignore filter:", err);
   }
 
-  // Wrap the ignores function to handle errors
+  // Wrap the ignores function to handle errors and normalize paths
   const originalIgnores = ig.ignores;
   ig.ignores = (path) => {
     if (!path || typeof path !== 'string' || path.trim() === '') {
@@ -544,7 +550,9 @@ function loadGitignore(rootDir) {
     }
     
     try {
-      return originalIgnores.call(ig, path);
+      // Normalize path before checking it against patterns
+      const normalizedPath = normalizePath(path);
+      return originalIgnores.call(ig, normalizedPath);
     } catch (err) {
       console.error(`Error in ignores for path '${path}':`, err);
       return false;
@@ -1008,7 +1016,17 @@ function shouldExcludeByDefault(filePath, rootDir) {
       return false; // Don't exclude the root directory itself
     }
     
-    // Use the ignore package to do glob pattern matching
+    // Load gitignore patterns for this root dir
+    const gitignoreFilter = loadGitignore(rootDir);
+    
+    // Check if the file is ignored by gitignore patterns
+    if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function' &&
+        gitignoreFilter.ignores(relativePathNormalized)) {
+      console.log(`File excluded by gitignore: ${relativePathNormalized}`);
+      return true;
+    }
+    
+    // Use the ignore package to do glob pattern matching for default excluded files
     try {
       const ig = ignore().add(excludedFiles);
       return ig.ignores(relativePathNormalized);
