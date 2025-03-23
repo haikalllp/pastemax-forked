@@ -84,8 +84,6 @@ const App = (): JSX.Element => {
     }
   );
   const [includeFileTree, setIncludeFileTree] = useState(false);
-  
-
 
   // State for sort dropdown
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);

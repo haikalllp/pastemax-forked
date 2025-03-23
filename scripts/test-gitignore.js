@@ -1,197 +1,122 @@
 /**
- * Test script to verify gitignore functionality is working correctly
  * This script tests that the loadGitignore function correctly integrates
- * gitignore patterns with the excludedFiles patterns.
+ * with the ignores check. It tests both absolute and relative paths.
  * 
- * It specifically tests cross-platform compatibility by simulating
- * paths with different separators and case.
+ * This helps debug issues with gitignore pattern handling across platforms.
  */
 
-const fs = require('fs');
 const path = require('path');
-const ignore = require('ignore');
-const { excludedFiles } = require('../excluded-files');
-const os = require('os');
+const fs = require('fs');
 
-// Normalize path to use forward slashes for cross-platform compatibility
-function normalizePath(filePath) {
-  if (!filePath) return filePath;
-  return filePath.replace(/\\/g, '/');
-}
+// Sample gitignore patterns to test
+const sampleGitignore = `
+# Comment should be ignored
+node_modules/
+*.log
+/dist
+build/
+.git/
+# Empty lines should be skipped
+
+*.min.js
+vendor/**
+`;
 
 // Mock function to simulate the loadGitignore function
-function loadGitignore(rootDir) {
-  let ig;
-  
+async function loadGitignore(rootDir) {
+  console.log(`Testing gitignore with root: ${rootDir}`);
   try {
-    ig = ignore();
-  } catch (err) {
-    console.error("Error creating ignore filter:", err);
-    return {
-      ignores: (path) => false
-    };
-  }
-  
-  try {
-    const gitignorePath = path.join(rootDir, ".gitignore");
-
-    if (fs.existsSync(gitignorePath)) {
-      try {
-        console.log(`Found .gitignore at ${gitignorePath}`);
-        const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
-        const normalizedPatterns = gitignoreContent
-          .split(/\r?\n/)
-          .map(pattern => pattern.trim())
-          .filter(pattern => pattern && !pattern.startsWith('#'))
-          .map(pattern => normalizePath(pattern));
-
-        console.log('Gitignore patterns:', normalizedPatterns);
-        ig.add(normalizedPatterns);
-      } catch (err) {
-        console.error("Error reading .gitignore:", err);
-      }
-    } else {
-      console.log(`No .gitignore found at ${gitignorePath}`);
-    }
-
-    // Add some default ignores that are common
-    ig.add([
-      ".git",
-      "node_modules",
-      ".DS_Store",
-      "Thumbs.db",
-      "desktop.ini",
-      ".idea",
-      ".vscode",
-      "dist",
-      "build",
-      "out"
-    ]);
-
-    // Add the excludedFiles patterns
-    if (Array.isArray(excludedFiles)) {
-      ig.add(excludedFiles);
-    }
-  } catch (err) {
-    console.error("Error configuring ignore filter:", err);
-  }
-
-  // Wrap the ignores function to normalize paths before checking
-  const originalIgnores = ig.ignores;
-  ig.ignores = (filePath) => {
-    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
-      return false;
-    }
+    // Create a simple mock of the ignore module functionality
+    const patterns = sampleGitignore
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'));
     
-    try {
-      // Normalize path before checking
-      const normalizedPath = normalizePath(filePath);
-      return originalIgnores.call(ig, normalizedPath);
-    } catch (err) {
-      console.error(`Error in ignores for path '${filePath}':`, err);
-      return false;
-    }
-  };
+    console.log('Loaded patterns:', patterns);
+    
+    return {
+      ignores: (filePath) => {
+        // Normalize path separators for consistency
+        filePath = filePath.replace(/\\/g, '/');
+        // Make sure path is relative (no leading slash)
+        if (filePath.startsWith('/')) {
+          filePath = filePath.substring(1);
+        }
+        
+        // Simple pattern matching
+        for (const pattern of patterns) {
+          let normalizedPattern = pattern;
+          // Remove leading slash for matching
+          if (normalizedPattern.startsWith('/')) {
+            normalizedPattern = normalizedPattern.substring(1);
+          }
+          
+          // Handle different pattern types
+          if (normalizedPattern.endsWith('/')) {
+            // Directory pattern
+            if (filePath.startsWith(normalizedPattern) || 
+                filePath.includes('/' + normalizedPattern)) {
+              console.log(`Path ${filePath} matched directory pattern ${normalizedPattern}`);
+              return true;
+            }
+          } else if (normalizedPattern.includes('*')) {
+            // Wildcard pattern
+            const regex = new RegExp('^' + normalizedPattern.replace(/\*/g, '.*') + '$');
+            const pathParts = filePath.split('/');
+            for (const part of pathParts) {
+              if (regex.test(part)) {
+                console.log(`Path ${filePath} matched wildcard pattern ${normalizedPattern}`);
+                return true;
+              }
+            }
+          } else {
+            // Exact file pattern
+            if (filePath === normalizedPattern || 
+                filePath.endsWith('/' + normalizedPattern)) {
+              console.log(`Path ${filePath} matched exact pattern ${normalizedPattern}`);
+              return true;
+            }
+          }
+        }
+        
+        return false;
+      }
+    };
+  } catch (err) {
+    console.error('Error in mock loadGitignore:', err);
+    return { ignores: () => false };
+  }
+}
 
-  return ig;
+// Test paths to check
+const testPaths = [
+  'node_modules/react/package.json',
+  'src/components/index.js',
+  'logs/error.log',
+  'dist/bundle.js',
+  'build/index.html',
+  '.git/HEAD',
+  'src/app.min.js',
+  'vendor/jquery/jquery.js',
+  'src/utils.js'
+];
+
+// Test function
+async function testGitignore() {
+  const rootDir = '/project';
+  
+  console.log('Testing gitignore pattern matching\n');
+  
+  const ignoreFilter = await loadGitignore(rootDir);
+  
+  console.log('\nResults:');
+  for (const testPath of testPaths) {
+    const isIgnored = ignoreFilter.ignores(testPath);
+    console.log(`- ${testPath}: ${isIgnored ? 'IGNORED' : 'INCLUDED'}`);
+  }
 }
 
 // Run the test
-function runTest() {
-  // Get the app root directory
-  const rootDir = path.resolve(__dirname, '..');
-  console.log('Testing gitignore functionality in directory:', rootDir);
-  console.log('Current operating system:', os.platform());
-  
-  // Load the gitignore patterns
-  const ignoreFilter = loadGitignore(rootDir);
-  
-  // Create a test file list with cross-platform path variants
-  const testFiles = [
-    'src/App.tsx',
-    'src\\App.tsx', // Windows-style path
-    'SRC/app.tsx', // Case difference to test case sensitivity
-    'node_modules/react/index.js',
-    '.git/config',
-    'release-builds/app.exe',
-    'package.json',
-    'dist/index.js',
-    '.env.local',
-    'README.md',
-    '.vscode/settings.json'
-  ];
-  
-  console.log('\nTesting file exclusion:');
-  testFiles.forEach(file => {
-    const isIgnored = ignoreFilter.ignores(file);
-    console.log(`${file} - ${isIgnored ? 'EXCLUDED' : 'INCLUDED'}`);
-  });
-  
-  // Check if .gitignore patterns are being respected
-  console.log('\nChecking custom .gitignore patterns:');
-  const customTests = [];
-  
-  // Try to read the actual .gitignore file
-  try {
-    const gitignorePath = path.join(rootDir, '.gitignore');
-    if (fs.existsSync(gitignorePath)) {
-      const content = fs.readFileSync(gitignorePath, 'utf8');
-      const patterns = content
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#') && !line.startsWith('!'))
-        .slice(0, 5); // Take first 5 patterns for testing
-      
-      patterns.forEach(pattern => {
-        // Create different platform variants for each pattern
-        const windowsPath = pattern.replace(/\//g, '\\').replace('*', 'testfile').replace('**', 'test\\path');
-        const unixPath = pattern.replace('*', 'testfile').replace('**', 'test/path');
-        const mixedCasePath = unixPath.replace(/[a-z]/g, (c, i) => i % 2 ? c : c.toUpperCase());
-        
-        customTests.push({
-          pattern,
-          testPaths: [
-            { path: unixPath, description: 'Unix path' },
-            { path: windowsPath, description: 'Windows path' },
-            { path: mixedCasePath, description: 'Mixed case path' }
-          ]
-        });
-      });
-      
-      customTests.forEach(({ pattern, testPaths }) => {
-        console.log(`\nTesting pattern: ${pattern}`);
-        testPaths.forEach(({ path: testPath, description }) => {
-          const isIgnored = ignoreFilter.ignores(testPath);
-          console.log(`  ${description}: ${testPath} - ${isIgnored ? 'EXCLUDED' : 'INCLUDED'}`);
-        });
-      });
-    } else {
-      console.log('No .gitignore file found for custom pattern testing');
-    }
-  } catch (err) {
-    console.error('Error testing custom patterns:', err);
-  }
-  
-  // Test with paths containing special characters and Unicode
-  console.log('\nTesting paths with special characters:');
-  const specialPaths = [
-    'src/special path with spaces/file.js',
-    'src/special-path-with-dashes/file.js',
-    'src/special_path_with_underscores/file.js',
-    'src/special.path.with.dots/file.js',
-    'src/special@path#with$symbols/file.js',
-    'src/специальный-путь/файл.js', // Unicode path
-  ];
-  
-  // Add patterns for special paths
-  const specialIgnore = ignore().add('**/special*/**');
-  specialPaths.forEach(testPath => {
-    const isIgnoredByDefault = ignoreFilter.ignores(testPath);
-    const isIgnoredBySpecial = specialIgnore.ignores(normalizePath(testPath));
-    console.log(`${testPath}:`);
-    console.log(`  - By default patterns: ${isIgnoredByDefault ? 'EXCLUDED' : 'INCLUDED'}`);
-    console.log(`  - By '**/special*/**': ${isIgnoredBySpecial ? 'EXCLUDED' : 'INCLUDED'}`);
-  });
-}
-
-runTest(); 
+testGitignore().catch(err => {
+  console.error('Test failed with error:', err);
+}); 

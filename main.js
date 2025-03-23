@@ -9,6 +9,11 @@ let isLoadingDirectory = false;
 let loadingTimeoutId = null;
 const MAX_DIRECTORY_LOAD_TIME = 60000; // 60 seconds timeout
 
+// Add a cache for gitignore file paths to avoid rescanning
+const gitignoreCache = new Map();
+// Maximum age in milliseconds before invalidating the cache (10 minutes)
+const GITIGNORE_CACHE_MAX_AGE = 10 * 60 * 1000;
+
 // Store reference to mainWindow globally so we can access it for theme updates
 let mainWindow = null;
 // Track current theme for DevTools sync
@@ -503,6 +508,10 @@ ipcMain.on("open-folder", async (event) => {
   if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
     const selectedPath = result.filePaths[0];
     try {
+      // Clear the gitignore cache since we're loading a new project
+      gitignoreCache.clear();
+      console.log("Cleared gitignore cache for new project");
+      
       // Ensure we're only sending a string, not an object
       const pathString = String(selectedPath);
       console.log("Sending folder-selected event with path:", pathString);
@@ -516,13 +525,16 @@ ipcMain.on("open-folder", async (event) => {
 });
 
 /**
- * Parse .gitignore file if it exists and create an ignore filter
+ * Parse .gitignore files if they exist and create an ignore filter
  * Handles path normalization for cross-platform compatibility
+ * Finds and consolidates patterns from all .gitignore files in the project
  * 
- * @param {string} rootDir - The root directory containing .gitignore
- * @returns {object} - Configured ignore filter
+ * @param {string} rootDir - The root directory containing .gitignore files
+ * @returns {Promise<object>} - Configured ignore filter
  */
-function loadGitignore(rootDir) {
+async function loadGitignore(rootDir) {
+  console.log(`Loading gitignore patterns for ${rootDir}`);
+  
   // Create a default ignore filter
   let ig;
   
@@ -542,111 +554,40 @@ function loadGitignore(rootDir) {
   try {
     // Ensure root directory path is absolute and normalized
     rootDir = ensureAbsolutePath(rootDir);
-    const gitignorePath = safePathJoin(rootDir, ".gitignore");
-
-    // More comprehensive default ignores that are common
-    const defaultIgnores = [
-      // Version control
-      ".git/**",
-      ".svn/**",
-      ".hg/**",
-      ".bzr/**",
-      "CVS/**",
-      
-      // Node/NPM
-      "node_modules/**",
-      "npm-debug.log*",
-      "yarn-debug.log*",
-      "yarn-error.log*",
-      "package-lock.json",
-      "yarn.lock",
-      
-      // Common build directories
-      "dist/**",
-      "build/**",
-      "out/**",
-      ".next/**",
-      ".nuxt/**",
-      "target/**",
-      "bin/**",
-      "obj/**",
-      
-      // IDE and editor files
-      ".idea/**",
-      ".vscode/**",
-      "*.swp",
-      "*.swo",
-      ".DS_Store",
-      "Thumbs.db",
-      "desktop.ini",
-      
-      // Python related
-      "__pycache__/**",
-      "*.pyc",
-      "*.pyo",
-      "*.pyd",
-      ".pytest_cache/**",
-      ".venv/**",
-      "venv/**",
-      
-      // Log files
-      "logs/**",
-      "*.log",
-      
-      // Dependency directories for other languages
-      "vendor/**",   // PHP/Go
-      ".bundle/**",  // Ruby
-      ".gradle/**"   // Gradle
-    ];
-
-    // Track which patterns were actually loaded
-    let loadedPatternsCount = 0;
-    let addedDefaultPatternsCount = 0;
-
-    if (fs.existsSync(gitignorePath)) {
-      try {
-        const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
-        // Split content into lines and normalize path separators
-        const normalizedPatterns = gitignoreContent
-          .split(/\r?\n/)
-          .map(pattern => pattern.trim())
-          .filter(pattern => pattern && !pattern.startsWith('#'))
-          // Ensure forward slashes in patterns for cross-platform compatibility
-          .map(pattern => normalizePath(pattern));
-
-        loadedPatternsCount = normalizedPatterns.length;
-        console.log(`Loaded ${normalizedPatterns.length} patterns from .gitignore in ${rootDir}`);
-        
-        // Log some sample patterns for debugging
-        if (normalizedPatterns.length > 0) {
-          console.log("Sample gitignore patterns:", normalizedPatterns.slice(0, 5));
-        }
-        
-        ig.add(normalizedPatterns);
-      } catch (err) {
-        console.error("Error reading .gitignore:", err);
-      }
+    
+    // Step 1: Find all .gitignore files in the project
+    const gitignoreFiles = await findAllGitignoreFiles(rootDir);
+    
+    // Step 2: Consolidate patterns from all gitignore files
+    let consolidatedPatterns = [];
+    if (gitignoreFiles.length > 0) {
+      consolidatedPatterns = await consolidateIgnorePatterns(gitignoreFiles, rootDir);
     } else {
-      console.log(`No .gitignore found in ${rootDir}, using only default ignores`);
+      console.log(`No .gitignore files found in ${rootDir}, using only default ignores`);
     }
-
-    // Add the default ignores
-    ig.add(defaultIgnores);
-    addedDefaultPatternsCount = defaultIgnores.length;
-    console.log(`Added ${defaultIgnores.length} default ignore patterns`);
-
-    // Normalize and add the excludedFiles patterns
-    if (Array.isArray(excludedFiles)) {
-      const normalizedExcludedFiles = excludedFiles.map(pattern => normalizePath(pattern));
-      ig.add(normalizedExcludedFiles);
-      console.log(`Added ${normalizedExcludedFiles.length} patterns from excluded-files.js`);
-    } else {
-      console.warn("excludedFiles is not an array, skipping");
-    }
-
-    console.log(`Total patterns loaded: ${loadedPatternsCount + addedDefaultPatternsCount + (Array.isArray(excludedFiles) ? excludedFiles.length : 0)}`);
+    
+    // Step 3: Merge with default ignores and excluded files
+    const finalPatterns = mergeWithDefaultIgnores(consolidatedPatterns);
+    
+    // Step 4: Add all patterns to the ignore filter
+    ig.add(finalPatterns);
+    
+    console.log(`Ignore filter configured with ${finalPatterns.length} patterns`);
   } catch (err) {
     console.error("Error configuring ignore filter:", err);
+    // Add basic defaults to be safe
+    try {
+      ig.add([
+        "node_modules",
+        ".git",
+        "*.log",
+        "dist",
+        "build"
+      ]);
+      console.log("Using fallback patterns due to error");
+    } catch (fallbackErr) {
+      console.error("Error adding fallback patterns:", fallbackErr);
+    }
   }
 
   // Wrap the ignores function to handle errors and normalize paths
@@ -777,7 +718,11 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
   // Ensure absolute and normalized paths
   dir = ensureAbsolutePath(dir);
   rootDir = ensureAbsolutePath(rootDir || dir);
-  ignoreFilter = ignoreFilter || loadGitignore(rootDir);
+  
+  // If ignoreFilter wasn't provided, load it
+  if (!ignoreFilter) {
+    ignoreFilter = await loadGitignore(rootDir);
+  }
 
   let results = [];
   let processedFiles = 0;
@@ -1218,7 +1163,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         // Initialize the gitignore filter once to avoid re-reading it for each directory
         // This is important to do first as it determines what files we'll skip entirely
         console.log("Initializing gitignore filters before file traversal");
-        const ignoreFilter = loadGitignore(folderPath);
+        const ignoreFilter = await loadGitignore(folderPath);
         
         // Log some info about the ignore filter to help with debugging
         console.log("Ignore filter initialized, proceeding with directory traversal");
@@ -1246,12 +1191,12 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
         });
 
         // Process the files to ensure they're serializable
-        const serializableFiles = files.map((file) => {
+        const serializableFiles = await Promise.all(files.map(async (file) => {
           // Normalize the path to use forward slashes consistently
           const normalizedPath = normalizePath(file.path);
           
           // Check if we should exclude this file by default
-          const shouldExclude = shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
+          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
           
           // Create a clean file object
           return {
@@ -1271,7 +1216,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault
             isDirectory: Boolean(file.isDirectory)
           };
-        });
+        }));
 
         try {
           console.log(`Sending ${serializableFiles.length} files to renderer`);
@@ -1334,7 +1279,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
 });
 
 // Check if a file should be excluded by default, using glob matching
-function shouldExcludeByDefault(filePath, rootDir) {
+async function shouldExcludeByDefault(filePath, rootDir) {
   // Handle empty paths to prevent errors
   if (!filePath || !rootDir) {
     console.warn("shouldExcludeByDefault received empty path:", { filePath, rootDir });
@@ -1410,7 +1355,7 @@ function shouldExcludeByDefault(filePath, rootDir) {
     }
     
     // Load gitignore patterns for this root dir
-    const gitignoreFilter = loadGitignore(rootDir);
+    const gitignoreFilter = await loadGitignore(rootDir);
     
     // Check if the file is ignored by gitignore patterns
     if (gitignoreFilter && typeof gitignoreFilter.ignores === 'function') {
@@ -1598,4 +1543,311 @@ function resetProgressCounters() {
   totalFilesFound = 0;
   totalDirectoriesProcessed = 0;
   totalDirectoriesFound = 0;
+}
+
+/**
+ * Checks if any of the cached gitignore files have been modified
+ * @param {string} rootDir - The root directory
+ * @returns {Promise<boolean>} - Returns true if any files were modified
+ */
+async function checkGitignoreFilesChanged(rootDir) {
+  if (!gitignoreCache.has(rootDir)) {
+    return true; // No cache, consider it changed
+  }
+  
+  const { timestamp, files } = gitignoreCache.get(rootDir);
+  
+  // Check if any of the cached files have been modified
+  for (const filePath of files) {
+    try {
+      const stats = await fs.promises.stat(filePath);
+      const lastModified = stats.mtimeMs;
+      
+      if (lastModified > timestamp) {
+        console.log(`Gitignore file changed: ${filePath}`);
+        return true;
+      }
+    } catch (err) {
+      console.error(`Error checking file modification time for ${filePath}:`, err);
+      // If we can't check, assume it changed
+      return true; 
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Find all .gitignore files in a project directory structure
+ * @param {string} rootDir - The root directory to start searching from
+ * @param {number} maxDepth - Maximum depth to search (default: 10)
+ * @returns {Promise<Array<string>>} - Array of paths to .gitignore files
+ */
+async function findAllGitignoreFiles(rootDir, maxDepth = 10) {
+  console.log(`Finding all .gitignore files in ${rootDir} (max depth: ${maxDepth})`);
+  
+  // Check the cache first
+  const cacheKey = rootDir;
+  if (gitignoreCache.has(cacheKey)) {
+    const { timestamp, files } = gitignoreCache.get(cacheKey);
+    
+    // Check if files have been modified
+    const filesChanged = await checkGitignoreFilesChanged(rootDir);
+    
+    // Use cached results if they're not too old and files haven't changed
+    if (Date.now() - timestamp < GITIGNORE_CACHE_MAX_AGE && !filesChanged) {
+      console.log(`Using cached gitignore files for ${rootDir} (${files.length} files)`);
+      return files;
+    }
+    if (filesChanged) {
+      console.log(`Gitignore files changed, rescanning for ${rootDir}`);
+    } else {
+      console.log(`Cache expired for ${rootDir}, rescanning for gitignore files`);
+    }
+  }
+
+  const gitignoreFiles = [];
+  const dirsToSkip = new Set(SKIP_DIRS);
+  
+  // Helper function to recursively find gitignore files
+  async function findGitignoreInDir(dir, currentDepth = 0) {
+    if (currentDepth > maxDepth) {
+      return; // Stop if we've reached the maximum depth
+    }
+    
+    try {
+      const dirEntries = await fs.promises.readdir(dir, { withFileTypes: true });
+      
+      // Check if there's a .gitignore file in this directory
+      const gitignorePath = path.join(dir, '.gitignore');
+      try {
+        await fs.promises.access(gitignorePath, fs.constants.F_OK);
+        gitignoreFiles.push(gitignorePath);
+      } catch (err) {
+        // No .gitignore in this directory, continue
+      }
+      
+      // Process subdirectories
+      for (const entry of dirEntries) {
+        if (entry.isDirectory() && !dirsToSkip.has(entry.name)) {
+          await findGitignoreInDir(path.join(dir, entry.name), currentDepth + 1);
+        }
+      }
+    } catch (err) {
+      console.error(`Error scanning directory ${dir} for gitignore files:`, err);
+    }
+  }
+  
+  await findGitignoreInDir(rootDir);
+  
+  // Cache the results
+  gitignoreCache.set(cacheKey, {
+    timestamp: Date.now(),
+    files: gitignoreFiles
+  });
+  
+  console.log(`Found ${gitignoreFiles.length} .gitignore files in ${rootDir}`);
+  return gitignoreFiles;
+}
+
+/**
+ * Read and parse a gitignore file
+ * @param {string} filePath - Path to the gitignore file
+ * @param {string} rootDir - The root directory of the project
+ * @returns {Object} - Object containing patterns and metadata
+ */
+async function readGitignoreFile(filePath, rootDir) {
+  try {
+    const content = await fs.promises.readFile(filePath, 'utf8');
+    const dirPath = path.dirname(filePath);
+    const relativeDir = path.relative(rootDir, dirPath);
+    const normalizedRelativeDir = normalizePath(relativeDir);
+    
+    // Parse patterns from the file
+    const patterns = content
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#')); // Remove comments and empty lines
+    
+    return {
+      path: filePath,
+      dirPath,
+      relativeDir: normalizedRelativeDir,
+      patterns,
+      isRootGitignore: dirPath === rootDir
+    };
+  } catch (err) {
+    console.error(`Error reading gitignore file ${filePath}:`, err);
+    return {
+      path: filePath,
+      dirPath: path.dirname(filePath),
+      patterns: [],
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Consolidate patterns from multiple gitignore files
+ * @param {Array<string>} gitignoreFiles - Array of paths to gitignore files
+ * @param {string} rootDir - The root directory of the project
+ * @returns {Promise<Array<string>>} - Consolidated list of unique patterns
+ */
+async function consolidateIgnorePatterns(gitignoreFiles, rootDir) {
+  console.log(`Consolidating patterns from ${gitignoreFiles.length} gitignore files`);
+  
+  // Map to store unique patterns with their sources
+  const patternMap = new Map();
+  // Set to track patterns that should be negated
+  const negatedPatterns = new Set();
+  
+  // Process each gitignore file
+  for (const filePath of gitignoreFiles) {
+    const gitignoreData = await readGitignoreFile(filePath, rootDir);
+    const { patterns, relativeDir, isRootGitignore } = gitignoreData;
+    
+    if (patterns.length === 0) continue;
+    
+    console.log(`Processing ${patterns.length} patterns from ${filePath}`);
+    
+    // Process each pattern
+    for (let pattern of patterns) {
+      // Handle negation
+      const isNegated = pattern.startsWith('!');
+      if (isNegated) {
+        pattern = pattern.substring(1);
+      }
+      
+      // Normalize pattern
+      let normalizedPattern = normalizePath(pattern);
+      
+      // For non-root gitignore files, adjust patterns to be relative to the root
+      if (!isRootGitignore && relativeDir && !pattern.startsWith('/')) {
+        // Don't prefix if the pattern is already absolute or explicitly specific to its directory
+        if (!pattern.includes('/')) {
+          // Pattern applies to any file with this name in any subdirectory
+          // Keep it as is
+        } else {
+          // Pattern is relative to the gitignore file's directory
+          normalizedPattern = path.posix.join(relativeDir, normalizedPattern);
+        }
+      }
+      
+      // Store pattern with its source for debugging
+      if (isNegated) {
+        negatedPatterns.add(normalizedPattern);
+      } else {
+        patternMap.set(normalizedPattern, {
+          source: filePath,
+          original: pattern
+        });
+      }
+    }
+  }
+  
+  // Create the final list of patterns
+  const consolidatedPatterns = [];
+  
+  // Add non-negated patterns
+  for (const [pattern, metadata] of patternMap.entries()) {
+    if (!negatedPatterns.has(pattern)) {
+      consolidatedPatterns.push(pattern);
+    }
+  }
+  
+  // Add negated patterns last so they take precedence
+  negatedPatterns.forEach(pattern => {
+    consolidatedPatterns.push(`!${pattern}`);
+  });
+  
+  console.log(`Consolidated to ${consolidatedPatterns.length} unique patterns`);
+  // Log some sample patterns for debugging
+  if (consolidatedPatterns.length > 0) {
+    console.log("Sample consolidated patterns:", consolidatedPatterns.slice(0, 5));
+  }
+  
+  return consolidatedPatterns;
+}
+
+/**
+ * Merge consolidated gitignore patterns with default exclusion patterns
+ * @param {Array<string>} consolidatedPatterns - Patterns from gitignore files
+ * @returns {Array<string>} - Final merged patterns with duplicates removed
+ */
+function mergeWithDefaultIgnores(consolidatedPatterns) {
+  // Prepare default ignores
+  const defaultIgnores = [
+    // Version control
+    ".git/**",
+    ".svn/**",
+    ".hg/**",
+    ".bzr/**",
+    "CVS/**",
+    
+    // Node/NPM
+    "node_modules/**",
+    "npm-debug.log*",
+    "yarn-debug.log*",
+    "yarn-error.log*",
+    "package-lock.json",
+    "yarn.lock",
+    
+    // Common build directories
+    "dist/**",
+    "build/**",
+    "out/**",
+    ".next/**",
+    ".nuxt/**",
+    "target/**",
+    "bin/**",
+    "obj/**",
+    
+    // IDE and editor files
+    ".idea/**",
+    ".vscode/**",
+    "*.swp",
+    "*.swo",
+    ".DS_Store",
+    "Thumbs.db",
+    "desktop.ini",
+    
+    // Python related
+    "__pycache__/**",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    ".pytest_cache/**",
+    ".venv/**",
+    "venv/**",
+    
+    // Log files
+    "logs/**",
+    "*.log",
+    
+    // Dependency directories for other languages
+    "vendor/**",   // PHP/Go
+    ".bundle/**",  // Ruby
+    ".gradle/**"   // Gradle
+  ];
+  
+  // Get patterns from excluded-files.js
+  const excludedFilesPatterns = Array.isArray(excludedFiles) ? [...excludedFiles] : [];
+  
+  // Use a Set to remove exact duplicates
+  const uniquePatterns = new Set([
+    ...defaultIgnores,
+    ...excludedFilesPatterns,
+    ...consolidatedPatterns
+  ]);
+  
+  // Convert back to array and log some stats
+  const mergedPatterns = [...uniquePatterns];
+  
+  console.log(`Merged patterns - Total: ${mergedPatterns.length}`);
+  console.log(`- Default: ${defaultIgnores.length}`);
+  console.log(`- From excluded-files.js: ${excludedFilesPatterns.length}`);
+  console.log(`- From gitignore files: ${consolidatedPatterns.length}`);
+  console.log(`- Unique after merging: ${mergedPatterns.length}`);
+  
+  return mergedPatterns;
 }
