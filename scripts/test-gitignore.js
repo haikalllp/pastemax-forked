@@ -7,8 +7,9 @@
 
 const path = require('path');
 const fs = require('fs');
+const { defaultIgnorePatterns } = require('../excluded-files');
 
-// Sample gitignore patterns to test
+// Sample gitignore patterns to test - mix of common patterns and some defaults from excluded-files.js
 const sampleGitignore = `
 # Comment should be ignored
 node_modules/
@@ -21,6 +22,10 @@ build/
 *.min.js
 vendor/**
 `;
+
+// Log the default ignore patterns being used
+console.log(`Using ${defaultIgnorePatterns.length} default ignore patterns from excluded-files.js`);
+console.log('Example patterns:', defaultIgnorePatterns.slice(0, 5));
 
 // Mock function to simulate the loadGitignore function
 async function loadGitignore(rootDir) {

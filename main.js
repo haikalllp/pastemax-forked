@@ -26,29 +26,18 @@ let totalDirectoriesProcessed = 0;
 let totalDirectoriesFound = 0;
 let isDeepScanEnabled = true; // Enable this for thorough scanning, can be disabled for faster superficial scans
 
+// Import the excluded files list and other configurations
+const { 
+  excludedFiles, 
+  binaryExtensions, 
+  skipDirectories,
+  defaultIgnorePatterns,
+  excludedRegexPatterns
+} = require("./excluded-files");
+
 // List of directories that should be completely skipped during traversal
 // These are directories that often cause performance issues and don't provide useful content
-const SKIP_DIRS = [
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  '.next',
-  '.nuxt',
-  'vendor',
-  '.gradle',
-  'target',
-  'android/app/build',
-  'ios/build',
-  '__pycache__',
-  'venv',
-  '.venv',
-  '.bundle',
-  '.cache',
-  'coverage',
-  '.idea',
-  '.vscode'
-];
+const SKIP_DIRS = skipDirectories;
 
 /**
  * Enhanced path handling functions for cross-platform compatibility
@@ -185,9 +174,6 @@ try {
   tiktoken = null;
 }
 
-// Import the excluded files list
-const { excludedFiles, binaryExtensions } = require("./excluded-files");
-
 // Initialize the encoder once at startup with better error handling
 let encoder;
 try {
@@ -205,6 +191,7 @@ try {
 }
 
 // Binary file extensions that should be excluded from token counting
+// Use the centralized list from excluded-files.js and add any built-in defaults
 const BINARY_EXTENSIONS = [
   // Images
   ".jpg",
@@ -258,7 +245,7 @@ const BINARY_EXTENSIONS = [
   // Others
   ".bin",
   ".dat",
-].concat(binaryExtensions || []); // Add any additional binary extensions from excluded-files.js
+].concat(binaryExtensions || []); // Add extensions from excluded-files.js
 
 // Max file size to read (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -577,7 +564,8 @@ async function loadGitignore(rootDir) {
     console.error("Error configuring ignore filter:", err);
     // Add basic defaults to be safe
     try {
-      ig.add([
+      // Use our centralized default ignores from excluded-files.js
+      ig.add(defaultIgnorePatterns || [
         "node_modules",
         ".git",
         "*.log",
@@ -1320,28 +1308,10 @@ async function shouldExcludeByDefault(filePath, rootDir) {
       return false; // Don't exclude the root directory itself
     }
     
-    // Check for common large/generated files that should be excluded
-    const excludedPatterns = [
-      // Node modules
-      /node_modules\//i,
-      // Package lock files
-      /package-lock\.json$/i,
-      /yarn\.lock$/i,
-      // Build output
-      /dist\//i,
-      /build\//i,
-      // Minified files
-      /\.min\.(js|css)$/i,
-      // Map files
-      /\.map$/i,
-      // Version control
-      /\.git\//i,
-      // Log files
-      /\.log$/i,
-    ];
-    
+    // Check for common large/generated files that should be excluded using regex patterns from excluded-files.js
+    // Use the patterns we imported at the top of the file
     // Check against common patterns first for performance
-    for (const pattern of excludedPatterns) {
+    for (const pattern of excludedRegexPatterns) {
       if (pattern.test(relativePathNormalized)) {
         return true;
       }
@@ -1775,60 +1745,8 @@ async function consolidateIgnorePatterns(gitignoreFiles, rootDir) {
  * @returns {Array<string>} - Final merged patterns with duplicates removed
  */
 function mergeWithDefaultIgnores(consolidatedPatterns) {
-  // Prepare default ignores
-  const defaultIgnores = [
-    // Version control
-    ".git/**",
-    ".svn/**",
-    ".hg/**",
-    ".bzr/**",
-    "CVS/**",
-    
-    // Node/NPM
-    "node_modules/**",
-    "npm-debug.log*",
-    "yarn-debug.log*",
-    "yarn-error.log*",
-    "package-lock.json",
-    "yarn.lock",
-    
-    // Common build directories
-    "dist/**",
-    "build/**",
-    "out/**",
-    ".next/**",
-    ".nuxt/**",
-    "target/**",
-    "bin/**",
-    "obj/**",
-    
-    // IDE and editor files
-    ".idea/**",
-    ".vscode/**",
-    "*.swp",
-    "*.swo",
-    ".DS_Store",
-    "Thumbs.db",
-    "desktop.ini",
-    
-    // Python related
-    "__pycache__/**",
-    "*.pyc",
-    "*.pyo",
-    "*.pyd",
-    ".pytest_cache/**",
-    ".venv/**",
-    "venv/**",
-    
-    // Log files
-    "logs/**",
-    "*.log",
-    
-    // Dependency directories for other languages
-    "vendor/**",   // PHP/Go
-    ".bundle/**",  // Ruby
-    ".gradle/**"   // Gradle
-  ];
+  // Get the default patterns from excluded-files.js
+  const defaultIgnores = defaultIgnorePatterns;
   
   // Get patterns from excluded-files.js
   const excludedFilesPatterns = Array.isArray(excludedFiles) ? [...excludedFiles] : [];
