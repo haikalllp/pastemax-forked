@@ -682,6 +682,7 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         isBinary: false,
         isSkipped: false,
         isDirectory: true,
+        excludedByDefault: false, // EXPLICITLY set this to false - root folder should never be excluded
         relativePath: ""
       };
       
@@ -856,25 +857,47 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
         // FIRST CHECK: Check if the file should be excluded by default patterns or gitignore
         const normalizedPath = normalizePath(fullPath);
         try {
-          // Check if file should be excluded by default patterns
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
+          // Check if this is a direct child of the root folder (root file)
+          const isRootFile = isRoot || (
+            safeRelativePath(rootDir, fullPath) !== '' && 
+            !safeRelativePath(rootDir, fullPath).includes('/') && 
+            !safeRelativePath(rootDir, fullPath).includes('\\')
+          );
           
-          // Check if file should be excluded by gitignore filter
-          const isIgnored = ignoreFilter && 
-                           typeof ignoreFilter.ignores === 'function' && 
-                           relativePath && 
-                           relativePath.trim() !== '' && 
-                           ignoreFilter.ignores(relativePath);
-          
-          // Skip the file if it should be excluded by either pattern
-          if (shouldExclude || isIgnored) {
-            console.log(`Skipping excluded file: ${relativePath}`);
-            totalFilesProcessed++;
-            return null;
+          // Special handling for root files - only exclude if in rootFilesToExclude
+          if (isRootFile) {
+            console.log(`Root file detected during traversal: ${dirent.name}`);
+            const shouldExcludeRootFile = rootFilesToExclude.includes(dirent.name);
+            
+            if (shouldExcludeRootFile) {
+              console.log(`Root file explicitly excluded: ${dirent.name}`);
+              totalFilesProcessed++;
+              return null;
+            } else {
+              console.log(`Root file explicitly included: ${dirent.name}`);
+              // Continue processing the file normally, but skip regular exclusion checks
+            }
+          } else {
+            // Check if file should be excluded by default patterns
+            const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
+            
+            // Check if file should be excluded by gitignore filter
+            const isIgnored = ignoreFilter && 
+                            typeof ignoreFilter.ignores === 'function' && 
+                            relativePath && 
+                            relativePath.trim() !== '' && 
+                            ignoreFilter.ignores(relativePath);
+            
+            // Skip the file if it should be excluded by either pattern
+            if (shouldExclude || isIgnored) {
+              console.log(`Skipping excluded file: ${relativePath}`);
+              totalFilesProcessed++;
+              return null;
+            }
+            
+            // File passed both default and gitignore exclusion checks
+            console.log(`File passed exclusion checks: ${relativePath}`);
           }
-          
-          // File passed both default and gitignore exclusion checks
-          console.log(`File passed exclusion checks: ${relativePath}`);
         } catch (ignoreErr) {
           console.error(`Error checking exclusion patterns for ${fullPath}:`, ignoreErr);
         }
@@ -1099,10 +1122,26 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
           // Normalize the path to use forward slashes consistently
           const normalizedPath = normalizePath(file.path);
           
-          // First, check if we should exclude this file by default (exclusion checks)
-          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
+          // Special handling for root folder - never exclude it
+          const isRootFolder = arePathsEqual(normalizedPath, normalizePath(folderPath));
           
-          // Then deal with binary detection and other properties
+          // Check if this is a direct child of the root folder (a root file)
+          const relPath = safeRelativePath(normalizePath(folderPath), normalizedPath);
+          const isRootFile = !relPath.includes('/') && !relPath.includes('\\') && relPath !== '';
+          
+          // Only perform exclusion check if it's not the root folder or a root file
+          let shouldExclude = false;
+          if (!isRootFolder && !isRootFile && file.excludedByDefault !== false) {
+            shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
+          }
+          
+          // Log root folder/file handling explicitly for debugging
+          if (isRootFolder) {
+            console.log(`ROOT FOLDER DETECTED: ${normalizedPath}, setting excludedByDefault=false`);
+          } else if (isRootFile) {
+            console.log(`ROOT FILE DETECTED: ${normalizedPath}, preserving excludedByDefault=false`);
+          }
+          
           // Create a clean file object
           return {
             name: file.name ? String(file.name) : "",
@@ -1118,7 +1157,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
             isSkipped: Boolean(file.isSkipped),
             error: file.error ? String(file.error) : null,
             fileType: file.fileType ? String(file.fileType) : null,
-            excludedByDefault: shouldExclude, // Use the result of shouldExcludeByDefault 
+            excludedByDefault: isRootFolder || isRootFile ? false : shouldExclude,
             isDirectory: Boolean(file.isDirectory)
           };
         }));
@@ -1227,6 +1266,12 @@ async function shouldExcludeByDefault(filePath, rootDir) {
     filePath = normalizePath(filePath);
     rootDir = normalizePath(rootDir);
 
+    // SPECIAL CASE: If the file path IS the root directory, never exclude it
+    if (arePathsEqual(filePath, rootDir)) {
+      console.log("This is the root directory itself, never exclude it");
+      return false;
+    }
+
     // Cache key combines both paths
     const cacheKey = `${rootDir}:${filePath}`;
     
@@ -1278,11 +1323,16 @@ async function shouldExcludeByDefault(filePath, rootDir) {
     if (!relativePathNormalized.includes('/') && !relativePathNormalized.includes('\\')) {
       // Debug log for root files
       console.log(`Root file: ${relativePathNormalized}, checking against ROOT_FILES_TO_EXCLUDE`);
-      console.log(`ROOT_FILES_TO_EXCLUDE contains ${rootFilesToExclude.length} items: ${JSON.stringify(rootFilesToExclude)}`);
+      
+      // More detailed logging for debugging
+      console.log(`ROOT_FILES_TO_EXCLUDE contains ${rootFilesToExclude.length} items`);
+      console.log(`Checking if '${relativePathNormalized}' is in: ${JSON.stringify(rootFilesToExclude)}`);
       
       // Check ONLY against the specific rootFilesToExclude list for root files
       // This ensures root files are only excluded if explicitly listed
       const shouldExcludeRootFile = rootFilesToExclude.includes(relativePathNormalized);
+      
+      console.log(`EXCLUSION RESULT for '${relativePathNormalized}': ${shouldExcludeRootFile ? 'EXCLUDED' : 'INCLUDED'}`);
       
       if (shouldExcludeRootFile) {
         console.log(`Root file ${relativePathNormalized} explicitly excluded by ROOT_FILES_TO_EXCLUDE list`);
