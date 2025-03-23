@@ -137,27 +137,36 @@ const Sidebar = ({
         
         // If we have rootFolders, build trees for each one
         if (rootFolders && rootFolders.length > 0) {
-          // Process each root folder
+          // Process each root folder without duplicates
+          const processedRootIds = new Set<string>();
+          
           rootFolders.forEach((rootFolder) => {
+            // Skip if this root ID has already been processed
+            if (processedRootIds.has(rootFolder.id)) {
+              console.log(`Skipping duplicate root folder: ${rootFolder.name} (${rootFolder.id})`);
+              return;
+            }
+            
+            processedRootIds.add(rootFolder.id);
             const normalizedRootPath = normalizePath(rootFolder.path);
             
-            // Find the root folder item if it exists
+            // Find the root directory in allFiles
             const rootFolderItem = allFiles.find(file => 
               file && file.path && file.isDirectory && 
               arePathsEqual(normalizePath(file.path), normalizedRootPath) &&
               file.rootId === rootFolder.id
             );
             
-            // Create a root node
+            // Create a root node with the correct ID format
             const rootNode: TreeNode = {
-              id: `root-${rootFolder.id}`,
+              id: `node-${normalizedRootPath}`,
               name: rootFolder.name || basename(normalizedRootPath),
               path: normalizedRootPath,
-              type: "root", // Use the new "root" type for special styling
+              type: "directory", // Use directory type to maintain original UI
               level: 0,
               children: [],
-              isExpanded: expandedNodes[`root-${rootFolder.id}`] !== undefined 
-                ? expandedNodes[`root-${rootFolder.id}`] 
+              isExpanded: expandedNodes[`node-${normalizedRootPath}`] !== undefined 
+                ? expandedNodes[`node-${normalizedRootPath}`] 
                 : true,
               fileData: rootFolderItem,
               rootId: rootFolder.id
@@ -166,7 +175,7 @@ const Sidebar = ({
             // Filter files for this root
             const rootFiles = allFiles.filter(file => file.rootId === rootFolder.id);
             
-            // Build children tree for this root
+            // Build children tree for this root using standard directory handling
             buildChildrenTree(rootNode, rootFiles, normalizedRootPath);
             rootTree.push(rootNode);
           });
@@ -217,65 +226,33 @@ const Sidebar = ({
         const sortedTree = rootTree.sort((a, b) => {
           if (a.type === "directory" && b.type === "file") return -1;
           if (a.type === "file" && b.type === "directory") return 1;
-
-          // Sort files by token count (largest first)
-          if (a.type === "file" && b.type === "file") {
-            const aTokens = a.fileData?.tokenCount || 0;
-            const bTokens = b.fileData?.tokenCount || 0;
-            return bTokens - aTokens;
-          }
-
           return a.name.localeCompare(b.name);
         });
 
-        // Apply expanded state directly during tree creation rather than in a separate effect
-        const applyExpandedState = (nodes: TreeNode[]): TreeNode[] => {
-          return nodes.map((node: TreeNode): TreeNode => {
-            if (node.type === "directory") {
-              const isExpanded =
-                expandedNodes[node.id] !== undefined
-                ? expandedNodes[node.id]
-                : true; // Default to expanded if not in state
-  
-              return {
-                ...node,
-                isExpanded,
-                children: node.children ? applyExpandedState(node.children) : [],
-              };
-            }
-            return node;
-          });
-        };
-
-        // Apply expanded state and sort in one operation
-        const processedTree = applyExpandedState(sortedTree);
-        
-        // Set the fully processed tree only once
-        setFileTree(processedTree);
+        // Apply expanded state and set the tree
+        setFileTree(sortedTree);
         setIsTreeBuildingComplete(true);
+        console.log("Built tree with", sortedTree.length, "root items");
+      } catch (error) {
+        console.error("Error building file tree:", error);
         
-        console.log("Tree building complete, nodes:", processedTree.length);
-      } catch (err) {
-        console.error("Error building file tree:", err);
-        // On error, try to build a simple flat tree as a fallback
+        // Try a simpler approach as fallback
         try {
-          console.log("Attempting to build a simple flat tree as fallback");
+          console.warn("Trying fallback flat-tree approach");
+          
+          // Create a simple flat list of all files
           const flatTree = allFiles
-            .filter(file => 
-              !arePathsEqual(normalizePath(file.path), selectedFolder ? normalizePath(selectedFolder) : '') && 
-              !file.excludedByDefault // Filter out excluded files
-            )
-            .map((file) => {
-              return {
-                id: `node-${file.path}`,
-                name: file.name,
-                path: file.path,
-                type: file.isDirectory ? "directory" as const : "file" as const,
-                level: 0,
-                fileData: file,
-                isExpanded: true
-              };
-            })
+            .filter(file => !file.excludedByDefault)
+            .map(file => ({
+              id: `node-${file.path}`,
+              name: file.name || basename(file.path),
+              path: file.path,
+              type: file.isDirectory ? "directory" : "file",
+              level: 0,
+              fileData: file,
+              isExpanded: true,
+              rootId: file.rootId
+            }))
             .sort((a, b) => {
               // Sort directories first
               if (a.type === "directory" && b.type === "file") return -1;
@@ -355,7 +332,10 @@ const Sidebar = ({
           type: isDirectory ? "directory" : "file",
           level: parentNode.level + 1,
           fileData: file,
-          isExpanded: true // Default expanded state, will be updated in the next effect
+          isExpanded: expandedNodes[nodeId] !== undefined 
+                ? expandedNodes[nodeId] 
+                : true,
+          rootId: file.rootId
         };
         
         if (isDirectory) {

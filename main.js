@@ -419,17 +419,25 @@ ipcMain.on("open-folder", async (event) => {
       gitignoreCache.clear();
       console.log("Cleared gitignore cache for new project");
       
-      // Reset root folders array
-      rootFolders = [{
+      // Create a new root folder object
+      const newRoot = {
         id: generateRootId(),
         path: selectedPath,
-        name: path.basename(selectedPath)
-      }];
+        name: path.basename(selectedPath),
+        isExpanded: true
+      };
+      
+      // Reset root folders array
+      rootFolders = [newRoot];
       
       // Ensure we're only sending a string, not an object
       const pathString = String(selectedPath);
       console.log("Sending folder-selected event with path:", pathString);
       event.sender.send("folder-selected", pathString);
+      
+      // Also send the root folder information
+      console.log("Sending root-folder-added event with root:", newRoot);
+      event.sender.send("root-folder-added", newRoot);
     } catch (err) {
       console.error("Error sending folder-selected event:", err);
       // Try a more direct approach as a fallback
@@ -464,7 +472,8 @@ ipcMain.on("add-root-folder", async (event) => {
       const newRoot = {
         id: generateRootId(),
         path: selectedPath,
-        name: path.basename(selectedPath)
+        name: path.basename(selectedPath),
+        isExpanded: true
       };
       
       rootFolders.push(newRoot);

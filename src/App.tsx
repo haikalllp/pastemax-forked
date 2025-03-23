@@ -80,9 +80,21 @@ const STORAGE_KEYS = {
 const App = (): JSX.Element => {
   // Clear saved folder on startup (temporary, for testing)
   useEffect(() => {
-    localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+    // Commenting out for multiple root folders testing
+    // localStorage.removeItem(STORAGE_KEYS.SELECTED_FOLDER);
+    
+    // These can remain for session data management
     localStorage.removeItem("hasLoadedInitialData");
     sessionStorage.removeItem("hasLoadedInitialData");
+    
+    // For testing, we could initialize ROOT_FOLDERS with test data if needed
+    // const testRootFolder = {
+    //   id: "test-root-1",
+    //   path: "C:/test-folder",
+    //   name: "Test Root",
+    //   isExpanded: true
+    // };
+    // localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify([testRootFolder]));
   }, []);
 
   // Load initial state from localStorage if available

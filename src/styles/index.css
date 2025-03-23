@@ -645,6 +645,36 @@ input[type="search"]:focus {
   pointer-events: none;
 }
 
+/* Top-level directory styling to make them visually distinct */
+.tree-item.top-level-directory {
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 12px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.tree-item.top-level-directory:hover {
+  background-color: var(--background-hover);
+}
+
+.tree-item.top-level-directory .tree-item-name {
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-item-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  font-weight: normal;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Styling for folders containing binary files - exclude root folder */
 .tree-item.contains-binary:not([data-level="0"]) .tree-item-name::after {
   content: "• has binary files";

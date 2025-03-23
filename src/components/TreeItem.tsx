@@ -30,7 +30,6 @@ const {
  * - Folder expansion/collapse
  * - Visual indicators for selection state
  * - Special cases for binary/skipped/excluded files
- * - Root folder nodes with special styling
  */
 const TreeItem = ({
   node,
@@ -98,34 +97,16 @@ const TreeItem = ({
       isSubPath(path, file.path)
     );
 
-  // Handle root folder node separately
-  if (type === "root") {
-    return (
-      <div className="root-folder-header">
-        <div className="root-folder-name">
-          <div
-            className={`tree-item-toggle ${isExpanded ? "expanded" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleExpanded(id);
-            }}
-            aria-label={isExpanded ? "Collapse root folder" : "Expand root folder"}
-          >
-            <ChevronRight size={16} />
-          </div>
-          <FolderOpen size={16} />
-          <span>{name}</span>
-        </div>
-        <div className="root-folder-path">{path}</div>
-      </div>
-    );
-  }
-
+  // Add additional class for top-level directories (level 0)
+  const isTopLevelDirectory = type === "directory" && level === 0;
+  
   return (
     <div
       className={`tree-item ${isSelected ? "selected" : ""} ${
         isExcludedByDefault ? "excluded-by-default" : ""
-      } ${isBinary ? "has-binary" : ""} ${hasBinaryFiles ? "contains-binary" : ""}`}
+      } ${isBinary ? "has-binary" : ""} ${hasBinaryFiles ? "contains-binary" : ""} ${
+        isTopLevelDirectory ? "top-level-directory" : ""
+      }`}
       style={{ marginLeft: `${level * 16}px` }}
       onClick={handleItemClick}
       data-level={level}
@@ -159,10 +140,16 @@ const TreeItem = ({
       {/* Item content (icon, name, and metadata) */}
       <div className="tree-item-content">
         <div className="tree-item-icon">
-          {type === "directory" ? <Folder size={16} /> : <File size={16} />}
+          {type === "directory" ? (isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />) : <File size={16} />}
         </div>
 
-        <div className="tree-item-name">{name}</div>
+        <div className="tree-item-name">
+          {name}
+          {/* Show path for top-level directories */}
+          {isTopLevelDirectory && (
+            <span className="tree-item-path">{path}</span>
+          )}
+        </div>
 
         {/* Show token count for files that have it */}
         {fileData && fileData.tokenCount > 0 && (

@@ -37,7 +37,7 @@ function ensureSerializable(data) {
 contextBridge.exposeInMainWorld("electron", {
   send: (channel, data) => {
     // whitelist channels
-    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed"];
+    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed", "add-root-folder", "remove-root-folder"];
     if (validChannels.includes(channel)) {
       // Ensure data is serializable before sending
       const serializedData = ensureSerializable(data);
@@ -49,7 +49,10 @@ contextBridge.exposeInMainWorld("electron", {
       "folder-selected",
       "file-list-data",
       "file-processing-status",
-      "startup-mode"
+      "startup-mode",
+      "root-folder-added",
+      "root-folder-removed",
+      "root-folder-error"
     ];
     if (validChannels.includes(channel)) {
       // Remove any existing listeners to avoid duplicates
@@ -61,7 +64,7 @@ contextBridge.exposeInMainWorld("electron", {
   // For backward compatibility (but still ensure serialization)
   ipcRenderer: {
     send: (channel, data) => {
-      const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed"];
+      const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading", "theme-changed", "add-root-folder", "remove-root-folder"];
       if (validChannels.includes(channel)) {
         const serializedData = ensureSerializable(data);
         ipcRenderer.send(channel, serializedData);
@@ -86,7 +89,10 @@ contextBridge.exposeInMainWorld("electron", {
         "folder-selected",
         "file-list-data",
         "file-processing-status",
-        "startup-mode"
+        "startup-mode",
+        "root-folder-added",
+        "root-folder-removed",
+        "root-folder-error"
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeListener(channel, (event, ...args) => func(...args));
