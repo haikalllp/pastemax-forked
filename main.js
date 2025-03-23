@@ -1227,12 +1227,8 @@ function shouldExcludeByDefault(relativePath) {
       return pathExclusionCache.get(cacheKey);
     }
     
-    // Skip binary files by default - fast check using extension
-    const ext = path.extname(relativePath).toLowerCase();
-    if (BINARY_EXTENSIONS.includes(ext)) {
-      pathExclusionCache.set(cacheKey, true);
-      return true;
-    }
+    // NOTE: We no longer exclude binary files here - they'll be marked with isBinary flag instead
+    // But will still be visible in the file tree
     
     // Quick regex check for common excluded patterns - this is much faster than glob matching
     // These patterns match things like node_modules, .git, etc.
@@ -1893,15 +1889,24 @@ function getFileInfo(filePath, rootDirInfo, ignoreFilter) {
     const relativePath = filePath.slice(rootDirInfo.rootPathLength);
     const relativePathNormalized = relativePath.replace(/\\/g, "/").replace(/^\//, "");
     
-    // Skip files excluded by our default patterns (fast sync check)
-    if (shouldExcludeByDefault(relativePathNormalized)) {
+    // Check if file is excluded by gitignore patterns - these are completely hidden
+    const isExcludedByGitignore = ignoreFilter && ignoreFilter.ignores && 
+                               ignoreFilter.ignores(relativePathNormalized);
+    
+    // For gitignore patterns, we skip the file entirely (hidden from UI)
+    if (isExcludedByGitignore) {
       return null;
     }
     
-    // Skip files excluded by gitignore patterns (if filter provided)
-    if (ignoreFilter && ignoreFilter.ignores && ignoreFilter.ignores(relativePathNormalized)) {
-      return null;
-    }
+    // Check if file is excluded by default patterns - shown but marked
+    const shouldExclude = shouldExcludeByDefault(relativePathNormalized);
+    
+    // Check if file is binary based on extension
+    const extension = path.extname(filePath).toLowerCase();
+    const isBin = isBinaryFile(filePath);
+    
+    // Determine if file is too large to process content
+    const isTooBig = fileStat.size > MAX_FILE_SIZE;
     
     // Create the file object
     const fileObj = {
@@ -1912,8 +1917,21 @@ function getFileInfo(filePath, rootDirInfo, ignoreFilter) {
       relativePath,
       relativePathNormalized,
       name: basename,
-      extension: path.extname(filePath).toLowerCase(),
-      lastModified: fileStat.mtime.getTime()
+      extension,
+      lastModified: fileStat.mtime.getTime(),
+      // Set binary flag but don't filter out binary files
+      isBinary: isBin,
+      // Mark files that are too large as skipped
+      isSkipped: isTooBig && !fileStat.isDirectory,
+      // Mark if the file is excluded by default (but still shown)
+      excludedByDefault: shouldExclude && !isBin, // Don't double-mark binary files
+      // Include error message for skipped files
+      error: isTooBig && !fileStat.isDirectory ? "File too large to process" : null,
+      // Default values for other properties
+      tokenCount: 0,
+      content: "",
+      // For binary files, include file type info
+      fileType: isBin ? extension.substring(1).toUpperCase() || "BIN" : null
     };
     
     return fileObj;

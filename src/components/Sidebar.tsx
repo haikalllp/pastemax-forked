@@ -476,19 +476,22 @@ const Sidebar = ({
   // Filter the tree based on search term
   const filterTree = (nodes: TreeNode[], term: string): TreeNode[] => {
     if (!term) {
-      // When not searching, filter out excluded files/folders
+      // When not searching, only filter out files marked as excludedByDefault
+      // We want to show binary files in the tree with their "Binary" badge
       return nodes.filter(node => {
-        // Skip excluded files/folders
-        if (node.fileData?.excludedByDefault) {
+        // Skip excluded files/folders, but keep binary files
+        if (node.fileData?.excludedByDefault && !node.fileData?.isBinary) {
           return false;
         }
         
         // For directories, also filter their children
         if (node.type === "directory" && node.children) {
-          // Filter children recursively
-          const filteredChildren = node.children.filter(child => !child.fileData?.excludedByDefault);
+          // Filter children recursively - keep binary files but filter out excludedByDefault
+          const filteredChildren = node.children.filter(child => 
+            child.fileData?.isBinary || !child.fileData?.excludedByDefault
+          );
           
-          // Only keep directories that have non-excluded children after filtering
+          // Only keep directories that have valid children after filtering
           if (filteredChildren.length === 0) {
             return false; // Skip empty directories after filtering
           }
@@ -505,8 +508,8 @@ const Sidebar = ({
 
     // Function to check if a node or any of its children match the search
     const nodeMatches = (node: TreeNode): boolean => {
-      // Always exclude files/folders marked as excludedByDefault
-      if (node.fileData?.excludedByDefault) {
+      // Always exclude files/folders marked as excludedByDefault, but keep binary files
+      if (node.fileData?.excludedByDefault && !node.fileData?.isBinary) {
         return false;
       }
       
