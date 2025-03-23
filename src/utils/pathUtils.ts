@@ -19,46 +19,40 @@ if (typeof window !== 'undefined' && (window as any).pathUtils) {
 } else if (typeof globalThis !== 'undefined' && (globalThis as any).pathUtils) {
   pathUtilsModule = (globalThis as any).pathUtils;
 } else {
-  // Try normal import as a fallback
-  try {
-    // Import from the shared module
-    const sharedPathUtils = require('../../shared/path-utils');
-    pathUtilsModule = sharedPathUtils.default || sharedPathUtils;
-  } catch (e) {
-    console.error('Failed to import path utilities', e);
-    
-    // Provide minimal fallback implementations for critical functions
-    pathUtilsModule = {
-      normalizePath: (path: string) => path?.replace(/\\/g, '/') || path,
-      makeRelativePath: (path: string) => path?.replace(/^\//, '') || path,
-      basename: (path: string) => {
-        if (!path) return '';
-        const parts = path.replace(/\\/g, '/').replace(/\/$/, '').split('/');
-        return parts[parts.length - 1] || '';
-      },
-      dirname: (path: string) => {
-        if (!path) return '.';
-        const normalizedPath = path.replace(/\\/g, '/');
-        const lastSlash = normalizedPath.lastIndexOf('/');
-        return lastSlash === -1 ? '.' : normalizedPath.slice(0, lastSlash);
-      },
-      join: (...parts: string[]) => parts.filter(Boolean).join('/'),
-      arePathsEqual: (path1: string, path2: string) => {
-        if (!path1 && !path2) return true;
-        if (!path1 || !path2) return false;
-        return path1.replace(/\\/g, '/').toLowerCase() === 
-               path2.replace(/\\/g, '/').toLowerCase();
-      },
-      isSubPath: (parent: string, child: string) => {
-        if (!parent || !child) return false;
-        const normalizedParent = parent.replace(/\\/g, '/').replace(/\/$/, '') + '/';
-        const normalizedChild = child.replace(/\\/g, '/');
-        return normalizedChild.toLowerCase().startsWith(normalizedParent.toLowerCase());
-      },
-      isNode: false,
-      isWindows: typeof navigator !== 'undefined' && navigator.platform && /win/i.test(navigator.platform)
-    };
-  }
+  // We're in the browser but pathUtils isn't globally available
+  console.warn('Path utilities not found in global scope, using fallback implementations');
+  
+  // Provide minimal fallback implementations for critical functions
+  pathUtilsModule = {
+    normalizePath: (path: string) => path?.replace(/\\/g, '/') || path,
+    makeRelativePath: (path: string) => path?.replace(/^\//, '') || path,
+    basename: (path: string) => {
+      if (!path) return '';
+      const parts = path.replace(/\\/g, '/').replace(/\/$/, '').split('/');
+      return parts[parts.length - 1] || '';
+    },
+    dirname: (path: string) => {
+      if (!path) return '.';
+      const normalizedPath = path.replace(/\\/g, '/');
+      const lastSlash = normalizedPath.lastIndexOf('/');
+      return lastSlash === -1 ? '.' : normalizedPath.slice(0, lastSlash);
+    },
+    join: (...parts: string[]) => parts.filter(Boolean).join('/'),
+    arePathsEqual: (path1: string, path2: string) => {
+      if (!path1 && !path2) return true;
+      if (!path1 || !path2) return false;
+      return path1.replace(/\\/g, '/').toLowerCase() === 
+             path2.replace(/\\/g, '/').toLowerCase();
+    },
+    isSubPath: (parent: string, child: string) => {
+      if (!parent || !child) return false;
+      const normalizedParent = parent.replace(/\\/g, '/').replace(/\/$/, '') + '/';
+      const normalizedChild = child.replace(/\\/g, '/');
+      return normalizedChild.toLowerCase().startsWith(normalizedParent.toLowerCase());
+    },
+    isNode: false,
+    isWindows: typeof navigator !== 'undefined' && navigator.platform && /win/i.test(navigator.platform)
+  };
 }
 
 // Export individual functions to ensure they're always available
