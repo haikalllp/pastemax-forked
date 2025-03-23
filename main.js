@@ -749,17 +749,27 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           return null;
         }
         
-        // Check if directory should be ignored first - prioritize ignores over anything else
+        // FIRST CHECK: Check if directory should be excluded by .gitignore or default patterns
         try {
-          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
-              relativePath && relativePath.trim() !== '' && 
-              ignoreFilter.ignores(relativePath)) {
-            console.log(`Skipping ignored directory: ${relativePath}`);
+          // Check if directory should be excluded by default patterns
+          const normalizedPath = normalizePath(fullPath);
+          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
+          
+          // Check if directory should be excluded by gitignore filter
+          const isIgnored = ignoreFilter && 
+                           typeof ignoreFilter.ignores === 'function' && 
+                           relativePath && 
+                           relativePath.trim() !== '' && 
+                           ignoreFilter.ignores(relativePath);
+          
+          // Skip the directory if it should be excluded by either pattern
+          if (shouldExclude || isIgnored) {
+            console.log(`Skipping excluded directory: ${relativePath}`);
             totalDirectoriesProcessed++;
-            return null; // Skip ignored directories completely without any further processing
+            return null;
           }
         } catch (ignoreErr) {
-          console.error(`Error in ignore filter for directory ${fullPath}:`, ignoreErr);
+          console.error(`Error checking exclusion patterns for directory ${fullPath}:`, ignoreErr);
         }
         
         let directoryResults = [];
@@ -854,20 +864,31 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window, isRoot =
           console.log('Skipping file:', fullPath);
           return null;
         }
-
-        // Safely check if file should be ignored - do this check first before any file processing
+        
+        // FIRST CHECK: Check if the file should be excluded by default patterns or gitignore
+        const normalizedPath = normalizePath(fullPath);
         try {
-          if (ignoreFilter && typeof ignoreFilter.ignores === 'function' && 
-              relativePath && relativePath.trim() !== '' && 
-              ignoreFilter.ignores(relativePath)) {
-            console.log(`Skipping ignored file: ${relativePath}`);
+          // Check if file should be excluded by default patterns
+          const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(rootDir));
+          
+          // Check if file should be excluded by gitignore filter
+          const isIgnored = ignoreFilter && 
+                           typeof ignoreFilter.ignores === 'function' && 
+                           relativePath && 
+                           relativePath.trim() !== '' && 
+                           ignoreFilter.ignores(relativePath);
+          
+          // Skip the file if it should be excluded by either pattern
+          if (shouldExclude || isIgnored) {
+            console.log(`Skipping excluded file: ${relativePath}`);
             totalFilesProcessed++;
-            return null; // Skip ignored files completely without any further processing
+            return null;
           }
         } catch (ignoreErr) {
-          console.error(`Error in ignore filter for ${fullPath}:`, ignoreErr);
+          console.error(`Error checking exclusion patterns for ${fullPath}:`, ignoreErr);
         }
 
+        // SECOND CHECK: Only after the file passes exclusion checks, we process it further
         try {
           const stats = await fs.promises.stat(fullPath);
           if (!isLoadingDirectory) return null;
@@ -1102,7 +1123,7 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
           // Normalize the path to use forward slashes consistently
           const normalizedPath = normalizePath(file.path);
           
-          // Check if we should exclude this file by default
+          // Check if we should exclude this file by default - correctly await the async function
           const shouldExclude = await shouldExcludeByDefault(normalizedPath, normalizePath(folderPath));
           
           // Create a clean file object
@@ -1201,7 +1222,15 @@ ipcMain.on("request-file-list", async (event, folderPath) => {
 });
 
 /**
- * Checks if a file should be excluded by default, using glob matching
+ * Checks if a file should be excluded by default, using glob matching and .gitignore patterns
+ * This function implements the primary exclusion logic for determining which files to show.
+ * 
+ * Order of operations:
+ * 1. Special handling for root directory and root files
+ * 2. Check against common regex patterns for excluded files (fast path)
+ * 3. Check against .gitignore patterns
+ * 4. Check against default excluded file patterns
+ * 
  * @param {string} filePath - The file path to check
  * @param {string} rootDir - The root directory
  * @returns {Promise<boolean>} - Whether the file should be excluded
@@ -1247,9 +1276,25 @@ async function shouldExcludeByDefault(filePath, rootDir) {
       return false; // Don't exclude the root directory itself
     }
     
+    // Special handling for files directly in root (no path separators)
+    if (!relativePathNormalized.includes('/') && !relativePathNormalized.includes('\\')) {
+      // Check for specific root-level files that should be excluded
+      const rootFilesToExclude = [
+        'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 
+        '.gitignore', '.npmrc', '.prettierrc', '.eslintrc', 
+        'tsconfig.json', '.babelrc'
+      ];
+      
+      if (rootFilesToExclude.includes(relativePathNormalized)) {
+        return true;
+      }
+      
+      // We want to show files in the root directory by default
+      return false;
+    }
+    
     // Check for common large/generated files that should be excluded using regex patterns from excluded-files.js
-    // Use the patterns we imported at the top of the file
-    // Check against common patterns first for performance
+    // These are quick checks that don't require loading full patterns
     for (const pattern of excludedRegexPatterns) {
       if (pattern.test(relativePathNormalized)) {
         return true;
@@ -1263,7 +1308,7 @@ async function shouldExcludeByDefault(filePath, rootDir) {
       console.log(`Checking if ${relativePathNormalized} should be excluded`);
     }
     
-    // Load gitignore patterns for this root dir
+    // Load gitignore patterns for this root directory
     const gitignoreFilter = await loadGitignore(rootDir, null);
     
     // Check if the file is ignored by gitignore patterns
@@ -1282,7 +1327,7 @@ async function shouldExcludeByDefault(filePath, rootDir) {
       }
     }
     
-    // Use the ignore package to do glob pattern matching for default excluded files
+    // Finally, check against the default exclusion patterns
     try {
       const ig = ignore().add(excludedFiles);
       const shouldExclude = ig.ignores(relativePathNormalized);
