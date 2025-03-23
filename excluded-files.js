@@ -68,20 +68,6 @@ module.exports = {
     "*.suo",
     "*.user",
 
-    // Binary and image files
-    "*.jpg",
-    "*.jpeg",
-    "*.png",
-    "*.gif",
-    "*.ico",
-    "*.webp",
-    "*.svg",
-    "*.pdf",
-    "*.zip",
-    "*.tar.gz",
-    "*.tgz",
-    "*.rar",
-
     // IDE and editor files
     ".idea/**",
     ".vscode/**",
@@ -122,7 +108,7 @@ module.exports = {
   // The app already has binary detection, but this ensures specific types
   // are always treated as binary regardless of content detection
   binaryExtensions: [
-    // Images (including .svg which might not be detected as binary)
+    // Images
     ".svg",
     ".jpg",
     ".jpeg",
@@ -133,7 +119,7 @@ module.exports = {
     ".ico",
     ".webp",
 
-    // Other binary formats
+    // Documents
     ".pdf",
     ".doc",
     ".docx",
@@ -141,5 +127,11 @@ module.exports = {
     ".xlsx",
     ".ppt",
     ".pptx",
+
+    // Archives
+    ".zip",
+    ".tar.gz",
+    ".tgz",
+    ".rar"
   ],
 };
