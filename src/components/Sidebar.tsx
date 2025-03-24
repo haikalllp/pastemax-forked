@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { SidebarProps, TreeNode, FileData, RootFolder } from "../types/FileTypes";
+import { TreeNode, FileData, RootFolder, isDirectoryNode, NodeType } from "../types/FileTypes";
 import SearchBar from "./SearchBar";
 import TreeItem from "./TreeItem";
 import { FolderOpen, Plus, X, Trash, Trash2 } from "lucide-react";
+import { IpcRendererEvent } from 'electron';
+import { FolderPlus, RefreshCw } from 'lucide-react';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -48,6 +50,34 @@ const {
   }
 } = pathUtils;
 
+interface StateCleanupData {
+  type: 'root-removed' | 'all-roots-removed' | 'cache-cleared';
+  rootId?: string;
+}
+
+interface SidebarProps {
+  rootFolders: RootFolder[];
+  selectedFolder: string | null;
+  openFolder: () => void;
+  addRootFolder: () => void;
+  removeRootFolder: (rootId: string) => void;
+  removeAllRootFolders: () => void;
+  allFiles: FileData[];
+  selectedFiles: FileData[];
+  toggleFileSelection: (file: FileData) => void;
+  toggleFolderSelection: (folder: RootFolder) => void;
+  searchTerm: string;
+  onSearchChange: (term: string) => void;
+  selectAllFiles: () => void;
+  deselectAllFiles: () => void;
+  expandedNodes: Set<string>;
+  toggleExpanded: (node: TreeNode) => void;
+  processingStatus: { status: string; message: string } | null;
+  onExpandedNodesChange: (nodes: Set<string>) => void;
+  onSelectedFileChange: (file: FileData | null) => void;
+  selectedFile: FileData | null;
+}
+
 /**
  * The Sidebar component displays a tree view of files and folders, allowing users to:
  * - Navigate through the file structure
@@ -74,6 +104,9 @@ const Sidebar = ({
   expandedNodes,
   toggleExpanded,
   processingStatus,
+  onExpandedNodesChange,
+  onSelectedFileChange,
+  selectedFile,
 }: SidebarProps) => {
   // Use type assertions to satisfy TypeScript
   const [fileTree, setFileTree] = useState([] as TreeNode[]);
@@ -186,15 +219,14 @@ const Sidebar = ({
             
             // Create a root node with the correct ID format
             const rootNode: TreeNode = {
-              id: `node-${normalizedRootPath}-${rootFolder.id}`, // Include rootId in node id
+              id: `node-${normalizedRootPath}-${rootFolder.id}`,
               name: rootFolder.name || basename(normalizedRootPath),
               path: normalizedRootPath,
-              type: "directory",
+              type: 'root' as NodeType,
               level: 0,
               children: [],
-              isExpanded: expandedNodes[`node-${normalizedRootPath}-${rootFolder.id}`] !== undefined 
-                ? expandedNodes[`node-${normalizedRootPath}-${rootFolder.id}`] 
-                : true,
+              isExpanded: expandedNodes.has(`node-${normalizedRootPath}-${rootFolder.id}`),
+              rootId: rootFolder.id,
               fileData: rootFolderItem || {
                 name: rootFolder.name || basename(normalizedRootPath),
                 path: normalizedRootPath,
@@ -204,7 +236,8 @@ const Sidebar = ({
                 tokenCount: 0,
                 size: 0,
                 isBinary: false,
-                isSkipped: false
+                isSkipped: false,
+                excludedByDefault: false
               }
             };
             
@@ -234,12 +267,10 @@ const Sidebar = ({
               id: `node-${normalizedSelectedFolder}`,
               name: rootFolderItem.name || basename(normalizedSelectedFolder),
               path: normalizedSelectedFolder,
-              type: "directory",
+              type: 'root' as NodeType,
               level: 0,
               children: [],
-              isExpanded: expandedNodes[`node-${normalizedSelectedFolder}`] !== undefined 
-                ? expandedNodes[`node-${normalizedSelectedFolder}`] 
-                : true,
+              isExpanded: expandedNodes.has(`node-${normalizedSelectedFolder}`),
               fileData: rootFolderItem
             };
             
@@ -303,10 +334,11 @@ const Sidebar = ({
         id: nodeId,
         name: child.name,
         path: childPath,
-        type: child.isDirectory ? "directory" : "file",
-        level: parentNode.level + 1,
+        type: child.isDirectory ? 'folder' : 'file' as NodeType,
+        level: (parentNode.level || 0) + 1,
         children: [],
-        isExpanded: expandedNodes[nodeId] !== undefined ? expandedNodes[nodeId] : false,
+        isExpanded: expandedNodes.has(nodeId),
+        rootId: rootId || undefined,
         fileData: child
       };
 
@@ -330,7 +362,7 @@ const Sidebar = ({
       result.push(node);
 
       // If it's a directory and it's expanded, add its children
-      if (node.type === "directory" && node.isExpanded && node.children && node.children.length > 0) {
+      if (isDirectoryNode(node) && node.isExpanded && node.children && node.children.length > 0) {
         console.log(`Flattening ${node.children.length} children of node ${node.id} (${node.name})`);
         result = [...result, ...flattenTree(node.children)];
       }
@@ -342,27 +374,20 @@ const Sidebar = ({
   // Filter the tree based on search term
   const filterTree = (nodes: TreeNode[], term: string): TreeNode[] => {
     if (!term) {
-      // When not searching, only filter out files marked as excludedByDefault
-      // We want to show binary files in the tree with their "Binary" badge
       return nodes.filter(node => {
-        // Skip excluded files/folders, but keep binary files
         if (node.fileData?.excludedByDefault && !node.fileData?.isBinary) {
           return false;
         }
         
-        // For directories, also filter their children
-        if (node.type === "directory" && node.children) {
-          // Filter children recursively - keep binary files but filter out excludedByDefault
+        if (isDirectoryNode(node) && node.children) {
           const filteredChildren = node.children.filter(child => 
             child.fileData?.isBinary || !child.fileData?.excludedByDefault
           );
           
-          // Only keep directories that have valid children after filtering
           if (filteredChildren.length === 0) {
-            return false; // Skip empty directories after filtering
+            return false;
           }
           
-          // Update the node's children to only include non-excluded items
           node.children = filterTree(filteredChildren, "");
         }
         
@@ -396,7 +421,7 @@ const Sidebar = ({
     // Filter the nodes
     return nodes.filter(nodeMatches).map((node) => {
       // If it's a directory, also filter its children
-      if (node.type === "directory" && node.children) {
+      if (isDirectoryNode(node) && node.children) {
         return {
           ...node,
           children: filterTree(node.children, term),
@@ -409,6 +434,62 @@ const Sidebar = ({
 
   // The final tree to render, filtered and flattened
   const visibleTree = flattenTree(filterTree(fileTree, searchTerm));
+
+  // Add state cleanup handler
+  useEffect(() => {
+    const handleStateCleanup = (_event: IpcRendererEvent, data: StateCleanupData) => {
+      console.log('Handling state cleanup:', data.type);
+      
+      switch (data.type) {
+        case 'root-removed':
+          if (data.rootId) {
+            // Clear expanded nodes for this root
+            const newExpandedNodes = new Set<string>();
+            const currentNodes = Array.from(expandedNodes);
+            currentNodes.forEach(nodeId => {
+              if (typeof nodeId === 'string' && !nodeId.startsWith(data.rootId!)) {
+                newExpandedNodes.add(nodeId);
+              }
+            });
+            onExpandedNodesChange(newExpandedNodes);
+            localStorage.setItem('expandedNodes', JSON.stringify(Array.from(newExpandedNodes)));
+            
+            // Clear selection if it was in this root
+            if (selectedFile && selectedFile.path && selectedFile.path.startsWith(data.rootId)) {
+              onSelectedFileChange(null);
+            }
+          }
+          break;
+          
+        case 'all-roots-removed':
+          // Clear all expanded nodes
+          onExpandedNodesChange(new Set<string>());
+          localStorage.removeItem('expandedNodes');
+          
+          // Clear selection
+          onSelectedFileChange(null);
+          break;
+          
+        case 'cache-cleared':
+          // Clear all state
+          onExpandedNodesChange(new Set<string>());
+          localStorage.removeItem('expandedNodes');
+          onSelectedFileChange(null);
+          break;
+      }
+    };
+    
+    window.electron.ipcRenderer.on('state-cleanup', handleStateCleanup);
+    
+    return () => {
+      window.electron.ipcRenderer.removeListener('state-cleanup', handleStateCleanup);
+    };
+  }, [expandedNodes, selectedFile, onExpandedNodesChange, onSelectedFileChange]);
+
+  // Add clear cache button
+  const handleClearCache = () => {
+    window.electron.ipcRenderer.send('clear-cache');
+  };
 
   return (
     <div 
@@ -444,6 +525,9 @@ const Sidebar = ({
                 Remove All
               </button>
             )}
+            <button onClick={handleClearCache} title="Clear Cache">
+              <RefreshCw className="w-4 h-4" />
+            </button>
           </div>
         ) : selectedFolder ? (
           <div className="sidebar-folder-path">{selectedFolder}</div>

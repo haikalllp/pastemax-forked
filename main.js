@@ -518,12 +518,23 @@ ipcMain.on("add-root-folder", async (event) => {
 
 // Handle removal of a root folder
 ipcMain.on("remove-root-folder", (event, rootId) => {
+  console.log(`Removing root folder with ID: ${rootId}`);
+  
   const initialLength = rootFolders.length;
-  rootFolders = rootFolders.filter(root => root.id !== rootId);
+  clearRootState(rootId);
   
   if (rootFolders.length < initialLength) {
-    console.log(`Removed root folder with ID: ${rootId}`);
-    event.sender.send("root-folder-removed", rootId);
+    console.log(`Successfully removed root folder with ID: ${rootId}`);
+    event.sender.send("root-folder-removed", {
+      rootId,
+      remainingRoots: rootFolders
+    });
+    
+    // Send state cleanup event
+    event.sender.send("state-cleanup", {
+      type: "root-removed",
+      rootId
+    });
   } else {
     console.error(`Root folder with ID ${rootId} not found`);
     event.sender.send("root-folder-error", {
@@ -536,10 +547,28 @@ ipcMain.on("remove-root-folder", (event, rootId) => {
 // Handle removal of all root folders
 ipcMain.on("remove-all-root-folders", (event) => {
   const initialLength = rootFolders.length;
-  rootFolders = [];
+  clearAllState();
   
   console.log(`Removed all root folders (${initialLength} folders)`);
   event.sender.send("root-folders-all-removed");
+  
+  // Send state cleanup event
+  event.sender.send("state-cleanup", {
+    type: "all-roots-removed"
+  });
+});
+
+// Add clear cache handler
+ipcMain.on("clear-cache", (event) => {
+  clearCache();
+  
+  // Send cache cleared event
+  event.sender.send("cache-cleared");
+  
+  // Send state cleanup event
+  event.sender.send("state-cleanup", {
+    type: "cache-cleared"
+  });
 });
 
 /**
@@ -1553,3 +1582,66 @@ ipcMain.on("cancel-directory-loading", (event) => {
     message: "Operation cancelled by user",
   });
 });
+
+// State cleanup functions
+function clearRootState(rootId) {
+  console.log(`Clearing state for root: ${rootId}`);
+  
+  // Clear gitignore cache for this root
+  const rootFolder = rootFolders.find(r => r.id === rootId);
+  if (rootFolder) {
+    gitignoreCache.delete(rootFolder.path);
+  }
+  
+  // Reset processing state if this was the last root
+  if (rootFolders.length <= 1) {
+    resetProgressCounters();
+    isLoadingDirectory = false;
+    isHandlingGitignore = false;
+  }
+  
+  // Remove from rootFolders array
+  rootFolders = rootFolders.filter(root => root.id !== rootId);
+}
+
+function clearAllState() {
+  console.log("Clearing all application state");
+  
+  // Clear all root folders
+  rootFolders = [];
+  
+  // Clear all caches
+  gitignoreCache.clear();
+  
+  // Reset all processing state
+  resetProgressCounters();
+  isLoadingDirectory = false;
+  isHandlingGitignore = false;
+  
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+}
+
+function clearCache() {
+  console.log("Clearing all caches and temporary data");
+  
+  // Clear gitignore cache
+  gitignoreCache.clear();
+  
+  // Clear any file system caches
+  if (mainWindow) {
+    mainWindow.webContents.session.clearCache();
+  }
+  
+  // Reset processing state
+  resetProgressCounters();
+  isLoadingDirectory = false;
+  isHandlingGitignore = false;
+  
+  if (loadingTimeoutId) {
+    clearTimeout(loadingTimeoutId);
+    loadingTimeoutId = null;
+  }
+}

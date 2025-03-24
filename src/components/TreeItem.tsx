@@ -3,7 +3,8 @@ import React, {
   useEffect,
   memo
 } from "react";
-import { TreeItemProps, TreeNode, FileData } from "../types/FileTypes";
+import type { MouseEventHandler, ChangeEventHandler } from "react";
+import { TreeItemProps, TreeNode, FileData, RootFolder, isDirectoryNode, NodeType } from "../types/FileTypes";
 import { ChevronRight, File, Folder, FolderOpen, X, Trash } from "lucide-react";
 import * as pathUtils from "../utils/pathUtils";
 
@@ -41,43 +42,48 @@ const TreeItem = ({
   isRootNode = false,
   removeRootFolder
 }: TreeItemProps) => {
-  const { id, name, path, type, level, isExpanded, fileData, rootId } = node;
-  const checkboxRef = useRef(null);
+  const { id, name, path, type, level = 0, isExpanded, fileData, rootId } = node;
+  const checkboxRef = useRef<HTMLInputElement>(null);
 
-  const isSelected = type === "file" && selectedFiles.some((selectedPath) => 
-    arePathsEqual(selectedPath, path)
+  const isSelected = type === "file" && selectedFiles.some((selectedFile) => 
+    arePathsEqual(selectedFile.path, path)
   );
 
   // Update the indeterminate state manually whenever it changes
   useEffect(() => {
     if (checkboxRef.current && fileData) {
-      const isPartiallySelected = isDirectoryPartiallySelected(fileData, selectedFiles, allFiles);
+      const isPartiallySelected = isDirectoryPartiallySelected(fileData, selectedFiles.map(f => f.path), allFiles);
       if (checkboxRef.current.indeterminate !== isPartiallySelected) {
         checkboxRef.current.indeterminate = isPartiallySelected;
       }
     }
   }, [fileData, selectedFiles, allFiles]);
 
-  const handleToggle = (e: any) => {
-    e.stopPropagation();
-    toggleExpanded(id);
+  const handleToggle: MouseEventHandler<HTMLDivElement> = (event) => {
+    event.stopPropagation();
+    toggleExpanded(node);
   };
 
-  const handleItemClick = (e: any) => {
-    if (type === "directory") {
-      toggleExpanded(id);
-    } else if (type === "file" && !isDisabled) {
-      toggleFileSelection(path);
+  const handleItemClick: MouseEventHandler<HTMLDivElement> = (event) => {
+    if (isDirectoryNode(node)) {
+      toggleExpanded(node);
+    } else if (type === "file" && !isDisabled && fileData) {
+      toggleFileSelection(fileData);
     }
   };
 
-  const handleCheckboxChange = (e: any) => {
-    e.stopPropagation();
-    if (type === "file") {
-      toggleFileSelection(path);
-    } else if (type === "directory") {
-      // Use toggleFolderSelection for all folders
-      toggleFolderSelection(path, e.target.checked);
+  const handleCheckboxChange: ChangeEventHandler<HTMLInputElement> = (event) => {
+    event.stopPropagation();
+    if (type === "file" && fileData) {
+      toggleFileSelection(fileData);
+    } else if (isDirectoryNode(node) && fileData) {
+      const rootFolder: RootFolder = {
+        id: rootId || '',
+        path: fileData.path,
+        name: fileData.name,
+        isExpanded: isExpanded || false
+      };
+      toggleFolderSelection(rootFolder);
     }
   };
 
@@ -85,25 +91,23 @@ const TreeItem = ({
   const isDisabled = fileData ? fileData.isBinary || fileData.isSkipped : false;
   const isBinary = fileData?.isBinary || false;
   const isSkipped = fileData?.isSkipped || false;
-
-  // Check if the file is excluded by default (but still selectable)
   const isExcludedByDefault = fileData?.excludedByDefault || false;
 
   // Check if this is a directory containing binary files (used for styling)
-  const hasBinaryFiles = type === "directory" && allFiles && 
+  const hasBinaryFiles = isDirectoryNode(node) && allFiles && 
     allFiles.some(file => 
       file.path && 
       !file.isDirectory && 
       file.isBinary && 
-      isSubPath(path, file.path)
+      pathUtils.isSubPath(path, file.path)
     );
 
   // Add additional class for top-level directories (level 0)
-  const isTopLevelDirectory = type === "directory" && level === 0;
+  const isTopLevelDirectory = (type === "folder" || type === "root") && level === 0;
   
   // Handle removing a root folder
-  const handleRemoveRoot = (e: any) => {
-    e.stopPropagation();
+  const handleRemoveRoot: MouseEventHandler<HTMLButtonElement> = (event) => {
+    event.stopPropagation();
     if (removeRootFolder && rootId) {
       removeRootFolder(rootId);
     }
@@ -123,7 +127,7 @@ const TreeItem = ({
         paddingLeft: `${(level) * 16}px`,
       }}
     >
-      {type === "directory" && (
+      {(type === "folder" || type === "root") && (
         <div className="tree-item-toggle" onClick={handleToggle}>
           <ChevronRight
             className={`tree-item-chevron ${isExpanded ? "expanded" : ""}`}

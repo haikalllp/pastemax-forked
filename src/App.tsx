@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
+import type { Dispatch, SetStateAction } from 'react';
 import Sidebar from "./components/Sidebar";
 import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
 import UserInstructions from "./components/UserInstructions";
-import { FileData, RootFolder } from "./types/FileTypes";
+import { FileData, RootFolder, TreeNode, SidebarProps, isFileData, isRootFolder, isTreeNode } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
 import ThemeToggle from "./components/ThemeToggle";
 import { PlusCircle, FolderOpen} from "lucide-react";
@@ -103,30 +104,20 @@ const App = (): JSX.Element => {
   const savedSortOrder = localStorage.getItem(STORAGE_KEYS.SORT_ORDER);
   const savedSearchTerm = localStorage.getItem(STORAGE_KEYS.SEARCH_TERM);
 
-  const [selectedFolder, setSelectedFolder] = useState(savedFolder as string | null);
-  const [rootFolders, setRootFolders] = useState(() => {
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(savedFolder);
+  const [rootFolders, setRootFolders] = useState<RootFolder[]>(() => {
     const savedRoots = localStorage.getItem(STORAGE_KEYS.ROOT_FOLDERS);
     return (savedRoots ? JSON.parse(savedRoots) : []) as RootFolder[];
   });
-  const [allFiles, setAllFiles] = useState([] as FileData[]);
-  const [selectedFiles, setSelectedFiles] = useState(
-    savedFiles ? JSON.parse(savedFiles) : [] as string[]
-  );
-  const [sortOrder, setSortOrder] = useState(
-    savedSortOrder || "tokens-desc"
-  );
-  const [searchTerm, setSearchTerm] = useState(savedSearchTerm || "");
-  const [expandedNodes, setExpandedNodes] = useState(
-    {} as Record<string, boolean>
-  );
-  const [displayedFiles, setDisplayedFiles] = useState([] as FileData[]);
-  const [processingStatus, setProcessingStatus] = useState(
-    { status: "idle", message: "" } as {
-      status: "idle" | "processing" | "complete" | "error" | "cancelled";
-      message: string;
-    }
-  );
-  const [includeFileTree, setIncludeFileTree] = useState(false);
+  const [allFiles, setAllFiles] = useState<FileData[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<FileData[]>([]);
+  const [sortOrder, setSortOrder] = useState<string>(savedSortOrder || "tokens-desc");
+  const [searchTerm, setSearchTerm] = useState<string>(savedSearchTerm || "");
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [displayedFiles, setDisplayedFiles] = useState<FileData[]>([]);
+  const [processingStatus, setProcessingStatus] = useState<{ status: string; message: string } | null>(null);
+  const [includeFileTree, setIncludeFileTree] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<FileData | null>(null);
 
   // State for sort dropdown
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -143,7 +134,7 @@ const App = (): JSX.Element => {
     );
     if (savedExpandedNodes) {
       try {
-        setExpandedNodes(JSON.parse(savedExpandedNodes));
+        setExpandedNodes(new Set(JSON.parse(savedExpandedNodes)));
       } catch (error) {
         console.error("Error parsing saved expanded nodes:", error);
       }
@@ -298,28 +289,25 @@ const App = (): JSX.Element => {
       
       if (rootFolder) {
         console.log("Found root folder in file list:", rootFolder.name, rootFolder.path);
-        setExpandedNodes((prev: Record<string, boolean>) => ({
-          ...prev,
-          [`node-${selectedFolder}`]: true
-        }));
+        setExpandedNodes((prev: Set<string>) => new Set([...prev, `node-${selectedFolder}`]));
       } else {
         console.log("Root folder not found in file list, selected folder is:", selectedFolder);
       }
 
       // Try to restore saved selection from localStorage, filtering for files that still exist
       const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
-      let newSelectedFiles: string[] = [];
+      let newSelectedFiles: FileData[] = [];
       
       if (savedFiles) {
         try {
-          const parsedSavedFiles: string[] = JSON.parse(savedFiles);
+          const parsedSavedFiles: FileData[] = JSON.parse(savedFiles);
           // Filter saved files to ensure they exist in the new file list and are selectable
-          newSelectedFiles = parsedSavedFiles.filter((path: string) =>
-            files.some((file: FileData) =>
-              file && file.path && path && 
-              file.path === path && 
-              !file.isBinary && !file.isSkipped && 
-              !file.excludedByDefault && !file.isDirectory
+          newSelectedFiles = parsedSavedFiles.filter((file: FileData) =>
+            files.some((f: FileData) =>
+              f && f.path && file.path && 
+              f.path === file.path && 
+              !f.isBinary && !f.isSkipped && 
+              !f.excludedByDefault && !f.isDirectory
             )
           );
         } catch (error) {
@@ -336,7 +324,7 @@ const App = (): JSX.Element => {
               !file.isBinary && !file.isSkipped && 
               !file.excludedByDefault && !file.isDirectory
           )
-          .map((file: FileData) => file.path);
+          .map((file: FileData) => file);
       }
 
       setSelectedFiles(newSelectedFiles);
@@ -417,12 +405,17 @@ const App = (): JSX.Element => {
       setAllFiles((prevFiles: FileData[]) => prevFiles.filter((file: FileData) => file.rootId !== rootId));
       
       // Update selected files
-      setSelectedFiles((prevSelected: string[]) => 
-        prevSelected.filter((filePath: string) => {
-          const file = allFiles.find((f: FileData) => f.path === filePath);
-          return file && file.rootId !== rootId;
-        })
+      setSelectedFiles((prevSelected: FileData[]) => 
+        prevSelected.filter((file: FileData) => file.rootId !== rootId)
       );
+      
+      // Clean up expandedNodes for this root path
+      setExpandedNodes((prev: Set<string>) => new Set([...prev].filter(node => !node.startsWith(`node-${rootId}`))));
+      
+      setProcessingStatus({
+        status: "idle",
+        message: `Removed folder: ${rootId}`
+      });
     };
     
     // Handle root folder error
@@ -548,32 +541,12 @@ const App = (): JSX.Element => {
       setAllFiles((prevFiles: FileData[]) => prevFiles.filter((file: FileData) => file.rootId !== rootId));
       
       // Update selected files
-      setSelectedFiles((prevSelected: string[]) => 
-        prevSelected.filter((filePath: string) => {
-          const file = allFiles.find((f: FileData) => f.path === filePath);
-          return file && file.rootId !== rootId;
-        })
+      setSelectedFiles((prevSelected: FileData[]) => 
+        prevSelected.filter((file: FileData) => file.rootId !== rootId)
       );
       
       // Clean up expandedNodes for this root path
-      setExpandedNodes((prevExpanded: Record<string, boolean>) => {
-        const normalizedRootPath = normalizePath(rootToRemove.path);
-        const nodeId = `node-${normalizedRootPath}`;
-        
-        // Create a new object without entries related to this root
-        const newExpandedNodes: Record<string, boolean> = {};
-        
-        for (const [key, value] of Object.entries(prevExpanded)) {
-          // Skip any keys that start with the node ID of the root being removed
-          if (!key.startsWith(nodeId)) {
-            newExpandedNodes[key] = value;
-          }
-        }
-        
-        // Save to localStorage
-        localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
-        return newExpandedNodes;
-      });
+      setExpandedNodes((prev: Set<string>) => new Set([...prev].filter(node => !node.startsWith(`node-${rootId}`))));
       
       setProcessingStatus({
         status: "idle",
@@ -593,7 +566,7 @@ const App = (): JSX.Element => {
     
     // Clear all localStorage related to root folders and app state
     localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify({}));
+    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(JSON.stringify(new Set())));
     
     // Consider clearing or resetting search terms if they're scoped to folders
     localStorage.setItem(STORAGE_KEYS.SEARCH_TERM, "");
@@ -603,7 +576,7 @@ const App = (): JSX.Element => {
     setRootFolders([]);
     setAllFiles([]);
     setSelectedFiles([]);
-    setExpandedNodes({});
+    setExpandedNodes(new Set());
     
     // Reset UI state
     setProcessingStatus({
@@ -635,124 +608,135 @@ const App = (): JSX.Element => {
     }
 
     // Apply sort
-    const [sortKey, sortDir] = sort.split("-");
-    const sorted = [...filtered].sort((a, b) => {
-      let comparison = 0;
-
-      if (sortKey === "name") {
-        comparison = a.name.localeCompare(b.name);
-      } else if (sortKey === "tokens") {
-        comparison = a.tokenCount - b.tokenCount;
-      } else if (sortKey === "size") {
-        comparison = a.size - b.size;
-      }
-
-      return sortDir === "asc" ? comparison : -comparison;
-    });
+    const sorted = sortFiles(filtered, sort);
 
     setDisplayedFiles(sorted);
   };
 
-  // Toggle file selection
-  const toggleFileSelection = (filePath: string) => {
-    // Normalize the incoming file path
-    const normalizedPath = normalizePath(filePath);
+  // Update toggleFileSelection to accept FileData
+  const toggleFileSelection = (file: FileData): void => {
+    if (!isFileData(file)) return;
     
-    setSelectedFiles((prev: string[]) => {
-      // Check if the file is already selected using case-sensitive/insensitive comparison as appropriate
-      const isSelected = prev.some(path => arePathsEqual(path, normalizedPath));
+    const normalizedPath = normalizePath(file.path);
+    setSelectedFiles((prevFiles: FileData[]) => {
+      const isSelected = prevFiles.some(existingFile => 
+        isFileData(existingFile) && arePathsEqual(existingFile.path, normalizedPath)
+      );
       
       if (isSelected) {
-        // Remove the file from selected files
-        return prev.filter((path: string) => !arePathsEqual(path, normalizedPath));
+        return prevFiles.filter(existingFile => 
+          isFileData(existingFile) && !arePathsEqual(existingFile.path, normalizedPath)
+        );
       } else {
-        // Add the file to selected files
-        return [...prev, normalizedPath];
+        return [...prevFiles, file];
       }
     });
   };
 
-  // Select all non-binary, non-skipped, non-excluded files
-  const selectAllFiles = () => {
-    const selectableFiles = allFiles.filter(
-      (file: FileData) =>
-        file && file.path && 
-        !file.isBinary && !file.isSkipped && 
-        !file.excludedByDefault && !file.isDirectory
-    );
+  // Update toggleFolderSelection to accept RootFolder
+  const toggleFolderSelection = (folder: RootFolder): void => {
+    if (!isRootFolder(folder)) return;
     
-    const filePaths = selectableFiles.map((file: FileData) => file.path);
-    setSelectedFiles(filePaths);
+    const normalizedFolderPath = normalizePath(folder.path);
+    const folderRootId = folder.id;
     
-    // Update localStorage
-    localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify(filePaths));
-  };
-
-  // Deselect all files
-  const deselectAllFiles = () => {
-    setSelectedFiles([]);
-    localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify([]));
-  };
-
-  // Toggle folder selection (select/deselect all files in folder)
-  const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
-    console.log('toggleFolderSelection called with:', { folderPath, isSelected });
-    
-    // Normalize the folder path for cross-platform compatibility
-    const normalizedFolderPath = normalizePath(folderPath);
-    console.log('Normalized folder path:', normalizedFolderPath);
-    
-    // Find the rootId for this folder path (if it's a specific root folder)
-    const folderRootId = allFiles.find((file: FileData) => 
-      file.path && arePathsEqual(file.path, normalizedFolderPath)
-    )?.rootId;
-    
-    // Function to check if a file is in the given folder or its subfolders
-    const isFileInFolder = (filePath: string, folderPath: string): boolean => {
-      const normalizedFilePath = normalizePath(filePath);
-      
-      // A file is in the folder if:
-      // 1. The paths are equal (exact match)
-      // 2. The file path is a subpath of the folder
-      return arePathsEqual(normalizedFilePath, folderPath) || 
-             isSubPath(folderPath, normalizedFilePath);
-    };
-    
-    // Filter all files to get only those in this folder (and subfolders) that are selectable
     const filesInFolder = allFiles.filter((file: FileData) => {
-      // Only consider files in the same root as the folder (if applicable)
       if (folderRootId && file.rootId !== folderRootId) {
         return false;
       }
       
-      const inFolder = isFileInFolder(file.path, normalizedFolderPath);
+      const inFolder = isSubPath(normalizedFolderPath, file.path);
       const selectable = !file.isBinary && !file.isSkipped && !file.excludedByDefault && !file.isDirectory;
       return inFolder && selectable;
     });
     
-    console.log(`Found ${filesInFolder.length} selectable files in folder ${normalizedFolderPath}`);
-    
-    // Extract just the paths of these files
-    const folderFilePaths = filesInFolder.map((file: FileData) => file.path);
-    
-    setSelectedFiles((prev: string[]) => {
-      let updatedSelection: string[];
+    setSelectedFiles((prevFiles: FileData[]) => {
+      const allSelected = filesInFolder.every((file: FileData) => 
+        prevFiles.some((p: FileData) => arePathsEqual(p.path, file.path))
+      );
       
-      if (isSelected) {
-        // Add all files that aren't already selected
-        updatedSelection = [...new Set([...prev, ...folderFilePaths])];
-      } else {
-        // Remove all files from the folder
-        updatedSelection = prev.filter((path: string) => 
-          !folderFilePaths.includes(path)
+      if (allSelected) {
+        return prevFiles.filter((p: FileData) => 
+          !filesInFolder.some((f: FileData) => arePathsEqual(f.path, p.path))
         );
+      } else {
+        const newSelection = [...prevFiles];
+        filesInFolder.forEach((file: FileData) => {
+          if (!prevFiles.some((p: FileData) => arePathsEqual(p.path, file.path))) {
+            newSelection.push(file);
+          }
+        });
+        return newSelection;
+      }
+    });
+  };
+
+  // Update toggleExpanded to accept TreeNode
+  const toggleExpanded = (node: TreeNode): void => {
+    if (!isTreeNode(node)) return;
+    
+    setExpandedNodes((prev: Set<string>) => {
+      const newSet = new Set(prev);
+      if (newSet.has(node.id)) {
+        newSet.delete(node.id);
+      } else {
+        newSet.add(node.id);
       }
       
-      // Update localStorage
-      localStorage.setItem(STORAGE_KEYS.SELECTED_FILES, JSON.stringify(updatedSelection));
+      // For debugging
+      console.log(`Toggling node ${node.id} to ${newSet.has(node.id) ? 'expanded' : 'collapsed'}`);
       
-      return updatedSelection;
+      // If this is a root node, store its expanded state in the rootFolders state as well
+      if (node.id.startsWith('node-') && rootFolders.length > 0) {
+        const nodePath = node.path;
+        
+        // Find the matching root folder
+        const updatedRootFolders = rootFolders.map((root: RootFolder) => {
+          if (!isRootFolder(root)) return root;
+          
+          const normalizedRootPath = normalizePath(root.path);
+          const normalizedNodePath = normalizePath(nodePath);
+          
+          // Check if this is the root node being toggled
+          if (arePathsEqual(normalizedRootPath, normalizedNodePath)) {
+            console.log(`Updating root folder ${root.name} expanded state to ${newSet.has(node.id)}`);
+            return {
+              ...root,
+              isExpanded: newSet.has(node.id)
+            };
+          }
+          return root;
+        });
+        
+        // Update the rootFolders state and store in localStorage
+        setRootFolders(updatedRootFolders);
+        localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRootFolders));
+      }
+      
+      // Also store in localStorage for persistence
+      localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(Array.from(newSet)));
+      
+      return newSet;
     });
+  };
+
+  // Update selectAllFiles with proper types
+  const selectAllFiles = (): void => {
+    setSelectedFiles((prevFiles: FileData[]) => {
+      const newFiles = allFiles.filter((file: FileData) => 
+        !file.isBinary && 
+        !file.isSkipped && 
+        !file.excludedByDefault && 
+        !file.isDirectory &&
+        !prevFiles.some((p: FileData) => arePathsEqual(p.path, file.path))
+      );
+      return [...prevFiles, ...newFiles];
+    });
+  };
+
+  // Deselect all files
+  const deselectAllFiles = (): void => {
+    setSelectedFiles([]);
   };
 
   // Handle sort change
@@ -763,9 +747,8 @@ const App = (): JSX.Element => {
   };
 
   // Handle search change
-  const handleSearchChange = (newSearch: string) => {
-    setSearchTerm(newSearch);
-    applyFiltersAndSort(allFiles, sortOrder, newSearch);
+  const handleSearchChange = (term: string): void => {
+    setSearchTerm(term);
   };
 
   // Toggle sort dropdown
@@ -848,47 +831,25 @@ const App = (): JSX.Element => {
     { value: "name-desc", label: "Name: Z to A" },
   ];
 
-  // Toggle the expanded state of a node by its ID
-  const toggleExpanded = (nodeId: string) => {
-    // Clone the current expandedNodes to avoid direct state mutation
-    const newExpandedNodes = { ...expandedNodes };
-    
-    // Toggle the expanded state for this node
-    newExpandedNodes[nodeId] = !newExpandedNodes[nodeId];
-    
-    // For debugging
-    console.log(`Toggling node ${nodeId} to ${newExpandedNodes[nodeId] ? 'expanded' : 'collapsed'}`);
-    
-    // If this is a root node, store its expanded state in the rootFolders state as well
-    if (nodeId.startsWith('node-') && rootFolders.length > 0) {
-      const nodePath = nodeId.substring(5); // Remove 'node-' prefix
-      
-      // Find the matching root folder
-      const updatedRootFolders = rootFolders.map((root: RootFolder) => {
-        const normalizedRootPath = normalizePath(root.path);
-        const normalizedNodePath = normalizePath(nodePath);
-        
-        // Check if this is the root node being toggled
-        if (arePathsEqual(normalizedRootPath, normalizedNodePath)) {
-          console.log(`Updating root folder ${root.name} expanded state to ${newExpandedNodes[nodeId]}`);
-          return {
-            ...root,
-            isExpanded: newExpandedNodes[nodeId]
-          };
-        }
-        return root;
-      });
-      
-      // Update the rootFolders state and store in localStorage
-      setRootFolders(updatedRootFolders);
-      localStorage.setItem(STORAGE_KEYS.ROOT_FOLDERS, JSON.stringify(updatedRootFolders));
-    }
-    
-    // Update expanded nodes state
-    setExpandedNodes(newExpandedNodes);
-    
-    // Also store in localStorage for persistence
-    localStorage.setItem(STORAGE_KEYS.EXPANDED_NODES, JSON.stringify(newExpandedNodes));
+  // Update sorting logic with proper type handling
+  const sortFiles = (files: FileData[], order: string): FileData[] => {
+    return [...files].sort((a: FileData, b: FileData) => {
+      let comparison = 0;
+
+      if (order === "name-asc" || order === "name-desc") {
+        comparison = a.name.localeCompare(b.name);
+      } else if (order === "tokens-asc" || order === "tokens-desc") {
+        const aTokens = a.tokenCount || 0;
+        const bTokens = b.tokenCount || 0;
+        comparison = aTokens - bTokens;
+      } else if (order === "size-asc" || order === "size-desc") {
+        const aSize = a.size || 0;
+        const bSize = b.size || 0;
+        comparison = aSize - bSize;
+      }
+
+      return order.endsWith("-desc") ? -comparison : comparison;
+    });
   };
 
   return (
@@ -908,7 +869,7 @@ const App = (): JSX.Element => {
                 <button
                   className="select-folder-btn"
                   onClick={openFolder}
-                  disabled={processingStatus.status === "processing"}
+                  disabled={processingStatus?.status === "processing"}
                 >
                   <FolderOpen className="btn-icon" />
                   Select Folder
@@ -917,7 +878,7 @@ const App = (): JSX.Element => {
                   <button
                     className="add-another-btn"
                     onClick={addRootFolder}
-                    disabled={processingStatus.status === "processing"}
+                    disabled={processingStatus?.status === "processing"}
                   >
                     <PlusCircle className="btn-icon" />
                     Add Another
@@ -928,7 +889,7 @@ const App = (): JSX.Element => {
           </div>
         </header>
 
-        {processingStatus.status === "processing" && (
+        {processingStatus?.status === "processing" && (
           <div className="processing-indicator">
             <div className="spinner"></div>
             <span>{processingStatus.message}</span>
@@ -941,7 +902,7 @@ const App = (): JSX.Element => {
           </div>
         )}
 
-        {processingStatus.status === "error" && (
+        {processingStatus?.status === "error" && (
           <div className="error-message">Error: {processingStatus.message}</div>
         )}
 
@@ -958,13 +919,16 @@ const App = (): JSX.Element => {
               selectedFiles={selectedFiles}
               toggleFileSelection={toggleFileSelection}
               toggleFolderSelection={toggleFolderSelection}
-              searchTerm={searchTerm}
-              onSearchChange={handleSearchChange}
               selectAllFiles={selectAllFiles}
               deselectAllFiles={deselectAllFiles}
               expandedNodes={expandedNodes}
               toggleExpanded={toggleExpanded}
               processingStatus={processingStatus}
+              onExpandedNodesChange={setExpandedNodes}
+              onSelectedFileChange={setSelectedFile}
+              selectedFile={selectedFile}
+              searchTerm={searchTerm}
+              onSearchChange={handleSearchChange}
             />
             <div className="content-area">
               <div className="content-header">

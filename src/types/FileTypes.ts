@@ -1,3 +1,19 @@
+export interface FileData {
+  path: string;
+  name: string;
+  content?: string;
+  tokenCount?: number;
+  size?: number;
+  isBinary: boolean;
+  isSkipped: boolean;
+  excludedByDefault: boolean;
+  isDirectory: boolean;
+  rootId?: string;
+  rootPath?: string;
+  error?: string;
+  fileType?: string;
+}
+
 export interface RootFolder {
   id: string;
   path: string;
@@ -5,32 +21,19 @@ export interface RootFolder {
   isExpanded: boolean;
 }
 
-export interface FileData {
-  name: string;
-  path: string;
-  content: string;
-  tokenCount: number;
-  size: number;
-  isBinary: boolean;
-  isSkipped: boolean;
-  error?: string;
-  fileType?: string;
-  excludedByDefault?: boolean;
-  isDirectory?: boolean;
-  rootId?: string;
-  rootPath?: string;
-}
+// Add node type constants
+export type NodeType = 'file' | 'folder' | 'root';
 
 export interface TreeNode {
   id: string;
-  name: string;
   path: string;
-  type: "file" | "directory" | "root";
+  name: string;
+  type: NodeType;
+  level?: number;
   children?: TreeNode[];
   isExpanded?: boolean;
-  level: number;
   fileData?: FileData;
-  rootId?: string;
+  rootId?: string;  // Add rootId to TreeNode
 }
 
 export interface SidebarProps {
@@ -41,39 +44,39 @@ export interface SidebarProps {
   removeRootFolder: (rootId: string) => void;
   removeAllRootFolders: () => void;
   allFiles: FileData[];
-  selectedFiles: string[];
-  toggleFileSelection: (filePath: string) => void;
-  toggleFolderSelection: (folderPath: string, isSelected: boolean) => void;
-  searchTerm: string;
-  onSearchChange: (term: string) => void;
+  selectedFiles: FileData[];
+  toggleFileSelection: (file: FileData) => void;
+  toggleFolderSelection: (folder: RootFolder) => void;
   selectAllFiles: () => void;
   deselectAllFiles: () => void;
-  expandedNodes: Record<string, boolean>;
-  toggleExpanded: (nodeId: string) => void;
-  processingStatus?: {
-    status: "idle" | "processing" | "complete" | "error" | "cancelled";
-    message: string;
-  };
+  expandedNodes: Set<string>;
+  toggleExpanded: (node: TreeNode) => void;
+  processingStatus: { status: string; message: string } | null;
+  onExpandedNodesChange: (nodes: Set<string>) => void;
+  onSelectedFileChange: (file: FileData | null) => void;
+  selectedFile: FileData | null;
+  searchTerm: string;
+  onSearchChange: (term: string) => void;
 }
 
 export interface FileListProps {
   files: FileData[];
-  selectedFiles: string[];
-  toggleFileSelection: (filePath: string) => void;
+  selectedFiles: FileData[];
+  toggleFileSelection: (file: FileData) => void;
 }
 
 export interface FileCardProps {
   file: FileData;
   isSelected: boolean;
-  toggleSelection: (filePath: string) => void;
+  toggleSelection: (file: FileData) => void;
 }
 
 export interface TreeItemProps {
   node: TreeNode;
-  selectedFiles: string[];
-  toggleFileSelection: (filePath: string) => void;
-  toggleFolderSelection: (folderPath: string, isSelected: boolean) => void;
-  toggleExpanded: (nodeId: string) => void;
+  selectedFiles: FileData[];
+  toggleFileSelection: (file: FileData) => void;
+  toggleFolderSelection: (folder: RootFolder) => void;
+  toggleExpanded: (node: TreeNode) => void;
   allFiles: FileData[];
   isRootNode?: boolean;
   removeRootFolder?: (rootId: string) => void;
@@ -93,4 +96,38 @@ export interface CopyButtonProps {
   onCopy: () => void;
   isDisabled: boolean;
   copyStatus: boolean;
+}
+
+// Add type guards
+export function isFileData(obj: any): obj is FileData {
+  return obj && typeof obj === 'object' && 
+    typeof obj.path === 'string' &&
+    typeof obj.name === 'string' &&
+    typeof obj.isBinary === 'boolean' &&
+    typeof obj.isSkipped === 'boolean' &&
+    typeof obj.excludedByDefault === 'boolean' &&
+    typeof obj.isDirectory === 'boolean';
+}
+
+export function isRootFolder(obj: any): obj is RootFolder {
+  return obj && typeof obj === 'object' &&
+    typeof obj.id === 'string' &&
+    typeof obj.path === 'string' &&
+    typeof obj.name === 'string' &&
+    typeof obj.isExpanded === 'boolean';
+}
+
+export function isTreeNode(obj: any): obj is TreeNode {
+  return obj && typeof obj === 'object' &&
+    typeof obj.id === 'string' &&
+    typeof obj.path === 'string' &&
+    typeof obj.name === 'string' &&
+    (obj.type === 'file' || obj.type === 'folder' || obj.type === 'root') &&
+    (obj.children === undefined || Array.isArray(obj.children)) &&
+    (obj.rootId === undefined || typeof obj.rootId === 'string');
+}
+
+// Add utility function to check if a node is a directory
+export function isDirectoryNode(node: TreeNode): boolean {
+  return node.type === 'folder' || node.type === 'root';
 }

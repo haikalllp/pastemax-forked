@@ -1,5 +1,41 @@
 // Type declarations for external modules
-declare module "react";
+declare module "react" {
+  export = React;
+  export as namespace React;
+  
+  namespace React {
+    interface RefObject<T> {
+      readonly current: T | null;
+    }
+    
+    function useRef<T>(initialValue: T | null): RefObject<T>;
+    function createRef<T>(): RefObject<T>;
+    function useEffect(effect: () => void | (() => void), deps?: any[]): void;
+    function memo<T>(component: T): T;
+    
+    interface MouseEvent<T = Element> extends SyntheticEvent<T> {
+      stopPropagation(): void;
+      target: EventTarget & T;
+    }
+    
+    interface ChangeEvent<T = Element> extends SyntheticEvent<T> {
+      target: EventTarget & T;
+    }
+    
+    interface SyntheticEvent<T = Element> {
+      stopPropagation(): void;
+      target: EventTarget & T;
+    }
+    
+    interface EventTarget {
+      checked?: boolean;
+    }
+    
+    type MouseEventHandler<T = Element> = (event: MouseEvent<T>) => void;
+    type ChangeEventHandler<T = Element> = (event: ChangeEvent<T>) => void;
+  }
+}
+
 declare module "react-dom/client";
 declare module "react/jsx-runtime";
 declare module "electron";
