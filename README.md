@@ -56,8 +56,8 @@ npm run package:win
 ```
 
 After successful build, you'll find the executable files in the `release-builds` directory:
-- `PasteMax Setup 1.0.0.exe` - Installer version
-- `PasteMax 1.0.0.exe` - Portable version
+- `PasteMax Setup 1.X.X.exe` - Installer version
+- `PasteMax 1.X.X.exe` - Portable version
 
 ## Development
 
