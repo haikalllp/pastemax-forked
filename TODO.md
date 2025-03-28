@@ -8,3 +8,9 @@
 - update .gitignore
 - test mac build
 - update instruction to be in the end to ensure LLM get context first
+- fix tree lag
+- fix UI lag
+- fix theme switch lag
+- fix .gitignore being processed multiple times (causing lag)
+- fix build error package
+
