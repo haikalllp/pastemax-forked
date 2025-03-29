@@ -20,6 +20,7 @@ export interface TreeNode {
   isExpanded?: boolean;
   level: number;
   fileData?: FileData;
+  hasBinaries?: boolean;
 }
 
 export interface SidebarProps {

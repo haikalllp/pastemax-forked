@@ -496,11 +496,27 @@ input[type="search"]:focus {
   flex-shrink: 0;
 }
 
+/* Base badge style */
 .tree-item-badge {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background-color: var(--hover-color); /* Subtle background */
+  background-color: var(--hover-color); /* Default background */
+  color: var(--text-secondary); /* Default text color */
+  margin-left: 6px; /* Keep consistent margin */
+  white-space: nowrap;
+}
+
+/* Specific style for individual binary file badges */
+.tree-item-badge-binary-file {
+  background-color: rgba(139, 0, 0, 0.7); /* Dark Red with reduced opacity */
+  color: #ffffff; /* White text */
+}
+
+/* Specific style for folder badges */
+.tree-item-badge-folder {
+  font-style: italic;
+  /* Inherits default background/text color from .tree-item-badge */
 }
 
 /* -------------------- File List (in Content Area) -------------------- */
@@ -1115,9 +1131,20 @@ textarea::-webkit-scrollbar-thumb {
   background-color: #2C2C2C; /* Darker hover for tree items */
 }
 
+/* Dark mode badge overrides */
 .dark-mode .tree-item-badge {
-  background-color: #333333;
-  color: #bbbbbb;
+  background-color: #333333; /* Default dark background */
+  color: #bbbbbb; /* Default dark text */
+}
+
+.dark-mode .tree-item-badge-binary-file {
+  background-color: rgba(165, 42, 42, 0.6); /* Slightly lighter red with reduced opacity for dark mode */
+  color: #ffffff; /* White text */
+}
+
+/* Folder badge inherits default dark mode colors but keeps italic */
+.dark-mode .tree-item-badge-folder {
+  font-style: italic;
 }
 
 .dark-mode .file-card-action {

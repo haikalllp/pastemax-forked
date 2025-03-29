@@ -94,6 +94,12 @@ function isValidPath(pathToCheck) {
   }
 }
 
+// Global cache for ignore filters keyed by normalized root directory
+const ignoreCache = new Map();
+
+// Global cache for file metadata keyed by normalized file path
+const fileCache = new Map();
+
 // Add handling for the 'ignore' module
 let ignore;
 try {
@@ -226,55 +232,102 @@ ipcMain.on("open-folder", async (event) => {
 });
 
 /**
- * Parse .gitignore file if it exists and create an ignore filter
- * Handles path normalization for cross-platform compatibility
+ * Traverses a directory to find and merge all .gitignore files
+ * Handles path normalization and duplicate patterns
  * 
- * @param {string} rootDir - The root directory containing .gitignore
- * @returns {object} - Configured ignore filter
+ * @param {string} rootDir - The root directory to start traversal from
+ * @returns {Promise<Set<string>>} - Set of unique normalized ignore patterns
  */
-function loadGitignore(rootDir) {
-  const ig = ignore();
+async function collectCombinedGitignore(rootDir) {
+  const ignorePatterns = new Set();
   
-  // Ensure root directory path is absolute and normalized
-  rootDir = ensureAbsolutePath(rootDir);
-  const gitignorePath = safePathJoin(rootDir, ".gitignore");
-
-  if (fs.existsSync(gitignorePath)) {
+  async function traverse(dir) {
     try {
-      const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
-      // Split content into lines and normalize path separators
-      const normalizedPatterns = gitignoreContent
-        .split(/\r?\n/)
-        .map(pattern => pattern.trim())
-        .filter(pattern => pattern && !pattern.startsWith('#'))
-        .map(pattern => normalizePath(pattern));
-
-      ig.add(normalizedPatterns);
+      const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+      
+      for (const dirent of dirents) {
+        const fullPath = safePathJoin(dir, dirent.name);
+        
+        // Skip invalid paths and system directories
+        if (fullPath.includes('.app') || fullPath === app.getAppPath()) {
+          continue;
+        }
+        
+        if (dirent.isDirectory()) {
+          await traverse(fullPath);
+        } else if (dirent.isFile() && dirent.name === '.gitignore') {
+          try {
+            const content = await fs.promises.readFile(fullPath, "utf8");
+            content.split(/\r?\n/)
+              .map(line => line.trim())
+              .filter(line => line && !line.startsWith('#'))
+              .forEach(pattern => ignorePatterns.add(normalizePath(pattern)));
+          } catch (err) {
+            console.error(`Error reading ${fullPath}:`, err);
+          }
+        }
+      }
     } catch (err) {
-      console.error("Error reading .gitignore:", err);
+      console.error(`Error reading directory ${dir}:`, err);
     }
   }
+  
+  await traverse(rootDir);
+  return ignorePatterns;
+}
 
-  // Add some default ignores that are common
-  ig.add([
+/**
+ * Load or create an ignore filter with cached patterns
+ * Combines patterns from all .gitignore files in the directory tree
+ * 
+ * @param {string} rootDir - The root directory containing .gitignore files
+ * @returns {object} - Configured ignore filter with cached patterns
+ */
+function loadGitignore(rootDir) {
+  // Ensure root directory path is absolute and normalized for consistent cache keys
+  rootDir = ensureAbsolutePath(rootDir);
+  
+  // Check cache first
+  if (ignoreCache.has(rootDir)) {
+    console.log('Using cached ignore filter for:', rootDir);
+    return ignoreCache.get(rootDir);
+  }
+
+  // Create new ignore filter with default patterns
+  const ig = ignore();
+  
+  // Add default patterns first
+  const defaultPatterns = [
     ".git",
     "node_modules",
     ".DS_Store",
-    // Add Windows-specific files to ignore
     "Thumbs.db",
     "desktop.ini",
-    // Add common IDE files
     ".idea",
     ".vscode",
-    // Add common build directories
     "dist",
     "build",
     "out"
-  ]);
+  ];
+  ig.add(defaultPatterns);
 
-  // Normalize and add the excludedFiles patterns
+  // Add excluded files patterns
   const normalizedExcludedFiles = excludedFiles.map(pattern => normalizePath(pattern));
   ig.add(normalizedExcludedFiles);
+
+  // Asynchronously collect and add patterns from all .gitignore files
+  collectCombinedGitignore(rootDir)
+    .then(patterns => {
+      if (patterns.size > 0) {
+        console.log(`Adding ${patterns.size} combined .gitignore patterns for:`, rootDir);
+        ig.add(Array.from(patterns));
+      }
+      // Cache the configured ignore filter
+      ignoreCache.set(rootDir, ig);
+    })
+    .catch(err => {
+      console.error("Error collecting .gitignore patterns:", err);
+    });
 
   return ig;
 }
@@ -381,23 +434,58 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
         // Calculate relative path safely
         const relativePath = safeRelativePath(rootDir, fullPath);
 
-        // Skip PasteMax app files and invalid paths
-        if (fullPath.includes('.app') || fullPath === app.getAppPath() || 
-            !isValidPath(relativePath) || relativePath.startsWith('..')) {
-          console.log('Skipping file:', fullPath);
+        // Early validation checks
+        if (!isValidPath(relativePath) || relativePath.startsWith('..')) {
+          console.log('Invalid path, skipping:', fullPath);
           return null;
         }
 
-        if (ignoreFilter.ignores(relativePath)) {
+        // System and app-specific path checks
+        if (fullPath.includes('.app') || fullPath === app.getAppPath()) {
+          console.log('System path, skipping:', fullPath);
           return null;
+        }
+
+        // Gitignore check before any file I/O
+        if (ignoreFilter.ignores(relativePath)) {
+          console.log('Ignored by filter, skipping:', relativePath);
+          return null;
+        }
+
+        // Early binary extension check without reading the file
+        if (isBinaryFile(fullPath)) {
+          console.log('Binary file by extension, skipping content read:', fullPath);
+          // Create and cache binary file metadata without file I/O
+          const fileData = {
+            name: dirent.name,
+            path: normalizePath(fullPath),
+            relativePath: relativePath,
+            tokenCount: 0,
+            size: 0, // We'll get actual size only if needed
+            content: "",
+            isBinary: true,
+            isSkipped: false,
+            fileType: path.extname(fullPath).substring(1).toUpperCase()
+          };
+          fileCache.set(normalizePath(fullPath), fileData);
+          return fileData;
+        }
+
+        // Check cache first
+        const fullPathNormalized = normalizePath(fullPath);
+        if (fileCache.has(fullPathNormalized)) {
+          console.log('Using cached file data for:', fullPathNormalized);
+          return fileCache.get(fullPathNormalized);
         }
 
         try {
           const stats = await fs.promises.stat(fullPath);
           if (!isLoadingDirectory) return null;
+
+          let fileData;
           
           if (stats.size > MAX_FILE_SIZE) {
-            return {
+            fileData = {
               name: dirent.name,
               path: normalizePath(fullPath),
               relativePath: relativePath,
@@ -408,10 +496,12 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
               isSkipped: true,
               error: "File too large to process"
             };
+            fileCache.set(fullPathNormalized, fileData);
+            return fileData;
           }
 
           if (isBinaryFile(fullPath)) {
-            return {
+            fileData = {
               name: dirent.name,
               path: normalizePath(fullPath),
               relativePath: relativePath,
@@ -422,12 +512,14 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
               isSkipped: false,
               fileType: path.extname(fullPath).substring(1).toUpperCase()
             };
+            fileCache.set(fullPathNormalized, fileData);
+            return fileData;
           }
 
           const fileContent = await fs.promises.readFile(fullPath, "utf8");
           if (!isLoadingDirectory) return null;
           
-          return {
+          fileData = {
             name: dirent.name,
             path: normalizePath(fullPath),
             relativePath: relativePath,
@@ -437,9 +529,11 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
             isBinary: false,
             isSkipped: false
           };
+          fileCache.set(fullPathNormalized, fileData);
+          return fileData;
         } catch (err) {
           console.error(`Error reading file ${fullPath}:`, err);
-          return {
+          const errorData = {
             name: dirent.name,
             path: normalizePath(fullPath),
             relativePath: relativePath,
@@ -451,6 +545,8 @@ async function readFilesRecursively(dir, rootDir, ignoreFilter, window) {
                    err.code === 'ENOENT' ? "File not found" : 
                    "Could not read file"
           };
+          fileCache.set(fullPathNormalized, errorData);
+          return errorData;
         }
       });
 

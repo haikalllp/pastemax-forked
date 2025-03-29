@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+- Implemented intelligent caching system:
+  - New file metadata cache for faster reprocessing
+  - Unified .gitignore pattern cache with deep repository support
+  - Session-persistent caching for improved performance
+- Enhanced file processing architecture:
+  - Smart validation checks before file I/O
+  - Early binary file detection without content reads
+  - Efficient path validation system
+- Enhanced binary file handling:
+  - Added binary flag propagation through directory structure
+  - New visual indicators for folders containing binary files
+  - Improved badge system with theme-aware styling
+  - Clear distinction between binary files and folders containing binaries
+- Improved file tree UI:
+  - Added styled badges for binary files and containing folders
+  - Enhanced badge visibility with distinct styling for light/dark themes
+  - Added italicized indicators for folders with binary content
+
+### Improved
+- Optimized large repository handling:
+  - Reordered file processing checks for better performance 
+  - Reduced unnecessary file I/O operations
+  - Improved handling of deep directory structures
+- Enhanced directory tree metadata:
+  - Added `hasBinaries` flag to track binary file presence
+  - Optimized binary state propagation through directory structure
+  - Improved UI feedback for binary content location
+- Better theme compatibility:
+  - Added semi-transparent backgrounds for binary indicators
+  - Enhanced contrast for badge text in both themes
+  - Consistent styling across light and dark modes
+
 ## v1.2.1 (2024-06-19)
 
 ### Added
