@@ -4,9 +4,10 @@ interface IgnorePatternsViewerProps {
   isOpen: boolean;
   onClose: () => void;
   patterns?: {
-    default: string[];
-    excludedFiles: string[];
-    gitignore: string[];
+    default?: string[];
+    excludedFiles?: string[];
+    // Expect the Map structure (serialized as object) now
+    gitignoreMap?: { [key: string]: string[] }; 
   };
   error?: string;
 }
@@ -48,7 +49,9 @@ const PatternSection = ({
   searchTerm
 }: PatternSectionProps): JSX.Element | null => {
   const filteredPatterns = useMemo(() => {
-    const normalized = formatPatterns(patterns);
+    // Ensure patterns is always an array, even if undefined initially
+    const normalized = formatPatterns(patterns || []);
+ 
     if (!searchTerm) return normalized;
     
     const searchLower = searchTerm.toLowerCase();
@@ -88,6 +91,14 @@ export const IgnorePatternsViewer = ({
 }: IgnorePatternsViewerProps): JSX.Element | null => {
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Log the received patterns prop for debugging
+  useEffect(() => {
+    if (isOpen) {
+      console.log("DEBUG: IgnorePatternsViewer received patterns:", JSON.stringify(patterns, null, 2));
+      console.log("DEBUG: gitignoreMap entries:", patterns?.gitignoreMap ? Object.keys(patterns.gitignoreMap).length : 0);
+    }
+  }, [isOpen, patterns]);
+
   // Reset search when modal is closed
   useEffect(() => {
     if (!isOpen) {
@@ -122,21 +133,40 @@ export const IgnorePatternsViewer = ({
               <div className="ignore-patterns-sections">
                 <PatternSection
                   title="Default Patterns"
-                  patterns={patterns.default}
+                  patterns={patterns.default || []} // Provide default empty array
                   searchTerm={searchTerm}
                 />
                 <PatternSection
                   title="Global Exclusions"
                   subtitle="From excluded-files.js"
-                  patterns={patterns.excludedFiles}
+                  patterns={patterns.excludedFiles || []} // Provide default empty array
                   searchTerm={searchTerm}
                 />
-                <PatternSection
-                  title="Repository Rules"
-                  subtitle="From .gitignore files"
-                  patterns={patterns.gitignore}
-                  searchTerm={searchTerm}
-                />
+                {/* Render gitignore patterns from the Map */}
+                {patterns.gitignoreMap ? (
+                  Object.entries(patterns.gitignoreMap)
+                    .sort(([a], [b]) => {
+                      if (a === '.') return -1;
+                      if (b === '.') return 1;
+                      return a.localeCompare(b);
+                    })
+                    .map(([dirPath, dirPatterns]) => (
+                      <PatternSection
+                        key={dirPath}
+                        title={`Repository Rules (${dirPath === '.' ? './' : dirPath})`}
+                        subtitle={`From ${dirPath === '.' ? './' : dirPath}/.gitignore`}
+                        patterns={dirPatterns}
+                        searchTerm={searchTerm}
+                      />
+                    ))
+                ) : (
+                  <PatternSection
+                    title="Repository Rules (No Rules Found)"
+                    subtitle="No .gitignore rules found in the repository"
+                    patterns={[]}
+                    searchTerm={searchTerm}
+                  />
+                )}
               </div>
             </React.Fragment>
           ) : (
