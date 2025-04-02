@@ -4,7 +4,10 @@ import FileList from "./components/FileList";
 import CopyButton from "./components/CopyButton";
 import { FileData } from "./types/FileTypes";
 import { ThemeProvider } from "./context/ThemeContext";
+import IgnorePatternsViewer from "./components/IgnorePatternsViewer";
 import ThemeToggle from "./components/ThemeToggle";
+import ViewIgnoresButton from "./components/ViewIgnoresButton";
+import { useIgnorePatterns } from "./hooks/useIgnorePatterns";
 import UserInstructions from "./components/UserInstructions";
 
 /**
@@ -31,6 +34,7 @@ declare global {
           channel: string,
           func: (...args: any[]) => void,
         ) => void;
+        invoke: (channel: string, ...args: any[]) => Promise<any>;
       };
     };
   }
@@ -77,7 +81,19 @@ const App = (): JSX.Element => {
   const [selectedFolder, setSelectedFolder] = useState( // Remove type argument
     savedFolder ? normalizePath(savedFolder) : null
   );
+  // Check if we're running in Electron or browser environment
+  const isElectron = window.electron !== undefined;
+
   const [allFiles, setAllFiles] = useState([] as FileData[]); // Explicitly type initial value
+  
+  // Initialize ignore patterns functionality
+  const {
+    isIgnoreViewerOpen,
+    ignorePatterns,
+    ignorePatternsError,
+    handleViewIgnorePatterns,
+    closeIgnoreViewer
+  } = useIgnorePatterns(selectedFolder, isElectron);
   // Normalize paths loaded from localStorage
   const [selectedFiles, setSelectedFiles] = useState( // Remove type argument
     (savedFiles ? JSON.parse(savedFiles).map(normalizePath) : []) as string[] // Explicitly type initial value
@@ -103,8 +119,6 @@ const App = (): JSX.Element => {
   // State for sort dropdown
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
-  // Check if we're running in Electron or browser environment
-  const isElectron = window.electron !== undefined;
 
   const [isSafeMode, setIsSafeMode] = useState(false);
 
@@ -129,9 +143,10 @@ const App = (): JSX.Element => {
     setIncludeFileTree(false);
     setProcessingStatus({ status: "idle", message: "All saved data cleared" });
 
-    // Also cancel any ongoing directory loading
+    // Also cancel any ongoing directory loading and clear main process caches
     if (isElectron) {
       window.electron.ipcRenderer.send("cancel-directory-loading");
+      window.electron.ipcRenderer.send("clear-main-cache");
     }
     
     console.log("All saved state cleared");
@@ -632,6 +647,10 @@ const App = (): JSX.Element => {
               >
                 Clear Data
               </button>
+              <ViewIgnoresButton
+                onClick={handleViewIgnorePatterns}
+                disabled={!selectedFolder || !isElectron}
+              />
             </div>
           </div>
         </header>
@@ -748,6 +767,14 @@ const App = (): JSX.Element => {
             </div>
           </div>
         )}
+
+        {/* Ignore Patterns Viewer Modal */}
+        <IgnorePatternsViewer
+          isOpen={isIgnoreViewerOpen}
+          onClose={closeIgnoreViewer}
+          patterns={ignorePatterns}
+          error={ignorePatternsError}
+        />
       </div>
     } />
   );

@@ -2,6 +2,76 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.2.3
+
+### Added
+- View Applied Ignore Patterns feature:
+  - Added modal interface to view all active ignore patterns
+  - Organized patterns by source (default, excluded-files.js, .gitignore)
+  - Live search functionality for quick pattern finding
+  - Smart pattern categorization with pattern counts
+  - Section-based filtering with empty state handling
+  - Auto-focus search with UX improvements
+  - Theme-aware styling with improved readability
+
+- Enhanced large repository handling:
+  - Extended directory loading timeout to 5 minutes for very large repositories
+  - Added detailed progress tracking for directories and files processed
+  - Improved logging and status messages with processing statistics
+  - Fixed race condition in .gitignore handling:
+    - Better handling of deep repositories with multiple .gitignore files
+    - Ensured all .gitignore patterns are loaded before file filtering begins
+    - Better support for complex repository structures with nested git repositories
+
+- Enhanced cache clearing functionality:
+  - Added main process cache clearing to "Clear Data" operation
+  - Complete clearing of ignoreCache and fileCache in main process
+  - Synchronized clearing of renderer and main process caches
+  - Improved state reset during cache clearing operations
+
+- Implemented intelligent caching system:
+  - New file metadata cache for faster reprocessing
+  - Unified .gitignore pattern cache with deep repository support
+  - Session-persistent caching for improved performance
+
+- Enhanced file processing architecture:
+  - Smart validation checks before file I/O
+  - Early binary file detection without content reads
+  - Efficient path validation system
+
+- Enhanced binary file handling:
+  - Added binary flag propagation through directory structure
+  - New visual indicators for folders containing binary files
+  - Improved badge system with theme-aware styling
+  - Clear distinction between binary files and folders containing binaries
+
+- Improved file tree UI:
+  - Added styled badges for binary files and containing folders
+  - Enhanced badge visibility with distinct styling for light/dark themes
+  - Added italicized indicators for folders with binary content
+
+### Improved
+- View Applied Ignore Patterns UI Improvements:
+  - Added sorting for better pattern organization
+  - Enhanced section styling with clear visual hierarchy
+  - Added hover effects for pattern lists
+  - Improved modal layout and spacing
+  - Added search input with theme-consistent styling
+  - Fixed search state management for better UX
+
+- Optimized large repository handling:
+  - Reordered file processing checks for better performance 
+  - Reduced unnecessary file I/O operations
+  - Improved handling of deep directory structures
+- Enhanced directory tree metadata:
+  - Added `hasBinaries` flag to track binary file presence
+  - Optimized binary state propagation through directory structure
+  - Improved UI feedback for binary content location
+- Better theme compatibility:
+  - Added semi-transparent backgrounds for binary indicators
+  - Enhanced contrast for badge text in both themes
+  - Consistent styling across light and dark modes
+
 ## v1.2.1 (2024-06-19)
 
 ### Added

@@ -89,5 +89,12 @@ contextBridge.exposeInMainWorld("electron", {
         ipcRenderer.removeListener(channel, (event, ...args) => func(...args));
       }
     },
+    invoke: (channel, data) => {
+      // whitelist channels
+      const validChannels = ['get-ignore-patterns'];
+      if (validChannels.includes(channel)) {
+        return ipcRenderer.invoke(channel, data);
+      }
+    },
   },
 });
