@@ -142,7 +142,17 @@ const Sidebar = ({
           }
         });
 
-        // Convert the nested object structure to the TreeNode array format
+        // Function to check if a directory contains binary files
+        const hasBinaryFiles = (files: TreeNode[]): boolean => {
+          return files.some(node => {
+            if (node.type === "file") {
+              return node.fileData?.isBinary || false;
+            }
+            return node.children ? hasBinaryFiles(node.children) : false;
+          });
+        };
+
+        // Convert nested object structure to TreeNode array format
         const convertToTreeNodes = (
           node: Record<string, any>,
           level = 0,
@@ -157,35 +167,32 @@ const Sidebar = ({
               const isExpanded =
                 expandedNodes[item.id] !== undefined
                   ? expandedNodes[item.id]
-                  : true; // Default to expanded if not in state
+                  : true;
+
+              // Check if this directory contains any binary files
+              const hasBinaries = hasBinaryFiles(children);
 
               return {
                 ...item,
                 children: children.sort((a, b) => {
-                  // Sort directories first
                   if (a.type === "directory" && b.type === "file") return -1;
                   if (a.type === "file" && b.type === "directory") return 1;
-
-                  // Sort files by token count (largest first)
                   if (a.type === "file" && b.type === "file") {
                     const aTokens = a.fileData?.tokenCount || 0;
                     const bTokens = b.fileData?.tokenCount || 0;
                     return bTokens - aTokens;
                   }
-
-                  // Default to alphabetical
                   return a.name.localeCompare(b.name);
                 }),
                 isExpanded,
+                hasBinaries,
               };
             }
           });
         };
 
-        // Convert to proper tree structure
+        // Convert to proper tree structure and sort the top level
         const treeRoots = convertToTreeNodes(fileMap);
-
-        // Sort the top level (directories first, then by name)
         const sortedTree = treeRoots.sort((a, b) => {
           if (a.type === "directory" && b.type === "file") return -1;
           if (a.type === "file" && b.type === "directory") return 1;

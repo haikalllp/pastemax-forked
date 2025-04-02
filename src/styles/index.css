@@ -496,11 +496,27 @@ input[type="search"]:focus {
   flex-shrink: 0;
 }
 
+/* Base badge style */
 .tree-item-badge {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background-color: var(--hover-color); /* Subtle background */
+  background-color: var(--hover-color); /* Default background */
+  color: var(--text-secondary); /* Default text color */
+  margin-left: 6px; /* Keep consistent margin */
+  white-space: nowrap;
+}
+
+/* Specific style for individual binary file badges */
+.tree-item-badge-binary-file {
+  background-color: rgba(139, 0, 0, 0.7); /* Dark Red with reduced opacity */
+  color: #ffffff; /* White text */
+}
+
+/* Specific style for folder badges */
+.tree-item-badge-folder {
+  font-style: italic;
+  /* Inherits default background/text color from .tree-item-badge */
 }
 
 /* -------------------- File List (in Content Area) -------------------- */
@@ -1115,9 +1131,20 @@ textarea::-webkit-scrollbar-thumb {
   background-color: #2C2C2C; /* Darker hover for tree items */
 }
 
+/* Dark mode badge overrides */
 .dark-mode .tree-item-badge {
-  background-color: #333333;
-  color: #bbbbbb;
+  background-color: #333333; /* Default dark background */
+  color: #bbbbbb; /* Default dark text */
+}
+
+.dark-mode .tree-item-badge-binary-file {
+  background-color: rgba(165, 42, 42, 0.6); /* Slightly lighter red with reduced opacity for dark mode */
+  color: #ffffff; /* White text */
+}
+
+/* Folder badge inherits default dark mode colors but keeps italic */
+.dark-mode .tree-item-badge-folder {
+  font-style: italic;
 }
 
 .dark-mode .file-card-action {
@@ -1203,4 +1230,197 @@ label {
 /* Final check on copy button label color */
 .dark-mode .copy-button-container label {
   color: var(--text-secondary); /* Use secondary text color */
+}
+
+/* -------------------- Ignore Patterns Modal -------------------- */
+.ignore-patterns-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ignore-patterns-modal {
+  background-color: var(--background-primary);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border: var(--standard-border);
+}
+
+.ignore-patterns-header {
+  padding: var(--standard-padding);
+  border-bottom: var(--standard-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ignore-patterns-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.close-button:hover {
+  background-color: var(--hover-color);
+  color: var(--text-primary);
+}
+
+.ignore-patterns-search {
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 12px;
+}
+
+.ignore-patterns-search .search-input {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.ignore-patterns-search .search-input:focus {
+  border-color: var(--accent-blue);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+.ignore-patterns-search .search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.ignore-patterns-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--standard-padding);
+}
+
+.ignore-patterns-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.ignore-patterns-sections .ignore-patterns-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background-color: var(--background-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.ignore-patterns-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.ignore-patterns-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ignore-patterns-section .pattern-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  background-color: var(--background-primary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.ignore-patterns-section .section-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: -8px;
+  font-style: italic;
+}
+
+.pattern-list {
+  background-color: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 16px;
+  margin: 0;
+  font-family: var(--font-family-code);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 200px;
+}
+
+.pattern-list:hover {
+  border-color: var(--accent-blue);
+}
+
+.ignore-patterns-error {
+  color: var(--error-color);
+  padding: 16px;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.ignore-patterns-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.no-patterns {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 14px;
+  padding: 12px;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+}
+
+/* Dark mode specific styles for ignore patterns modal */
+.dark-mode .ignore-patterns-modal {
+  border-color: var(--border-color);
+}
+
+.dark-mode .pattern-list {
+  border: var(--standard-border);
+}
+
+.dark-mode .ignore-patterns-error {
+  background-color: rgba(231, 76, 60, 0.1);
 }
