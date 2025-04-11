@@ -39,6 +39,7 @@ npm run package:all    # For all platforms
 ### 4. Ensure the host can access the built artifacts
 
 From the host, run:
+
 ```bash
 chmod -R 777 release-builds
 ```
@@ -48,6 +49,7 @@ chmod -R 777 release-builds
 The built application will be available in the `release-builds` directory on your host machine. You can run it directly from there.
 
 For example, on Windows, it is built at:
+
 ```
 `.\pastemax\release-builds\win-unpacked\PasteMax.exe`
 ```

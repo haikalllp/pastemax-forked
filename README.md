@@ -8,6 +8,7 @@ A modern file viewer application for developers to easily navigate, search, and 
 ![PasteMax](https://github.com/user-attachments/assets/7160e35a-a0d5-4519-bc84-8035e3aa3f92)
 
 ## Video
+
 [YouTube Link](https://youtu.be/YV-pZSDNnPo)
 
 ## Features
@@ -57,6 +58,7 @@ npm run package:win
 ```
 
 After successful build, you'll find the executable files in the `release-builds` directory:
+
 - `PasteMax Setup 1.0.0.exe` - Installer version
 - `PasteMax 1.0.0.exe` - Portable version
 
@@ -101,6 +103,7 @@ npm run package
 ```
 
 Platform-specific build commands:
+
 - Windows: `npm run package:win`
 - macOS: `npm run package:mac`
 - Linux: `npm run package:linux`
@@ -164,6 +167,7 @@ This is caused by dependencies not being properly included in the package. To fi
 If you encounter issues with the standard `npm run package` command:
 
 1. Try using the platform-specific build command:
+
    - Windows: `npm run package:win`
    - macOS: `npm run package:mac`
    - Linux: `npm run package:linux`

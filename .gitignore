@@ -65,3 +65,6 @@ repomix-output.xml
 repomix.config.json
 .repomixignore
 
+# Roo
+.roomodes
+

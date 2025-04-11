@@ -1,5 +1,5 @@
 // Preload script
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Helper function to ensure data is serializable
 function ensureSerializable(data) {
@@ -8,7 +8,7 @@ function ensureSerializable(data) {
   }
 
   // Handle primitive types directly
-  if (typeof data !== "object") {
+  if (typeof data !== 'object') {
     return data;
   }
 
@@ -22,7 +22,7 @@ function ensureSerializable(data) {
   for (const key in data) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       // Skip functions or symbols which are not serializable
-      if (typeof data[key] === "function" || typeof data[key] === "symbol") {
+      if (typeof data[key] === 'function' || typeof data[key] === 'symbol') {
         continue;
       }
       // Recursively process nested objects
@@ -34,10 +34,15 @@ function ensureSerializable(data) {
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld("electron", {
+contextBridge.exposeInMainWorld('electron', {
   send: (channel, data) => {
     // whitelist channels
-    const validChannels = ["open-folder", "request-file-list", "debug-file-selection", "cancel-directory-loading"];
+    const validChannels = [
+      'open-folder',
+      'request-file-list',
+      'debug-file-selection',
+      'cancel-directory-loading',
+    ];
     if (validChannels.includes(channel)) {
       // Ensure data is serializable before sending
       const serializedData = ensureSerializable(data);
@@ -46,13 +51,13 @@ contextBridge.exposeInMainWorld("electron", {
   },
   receive: (channel, func) => {
     const validChannels = [
-      "folder-selected",
-      "file-list-data",
-      "file-processing-status",
-      "startup-mode",
-      "file-added",
-      "file-updated",
-      "file-removed"
+      'folder-selected',
+      'file-list-data',
+      'file-processing-status',
+      'startup-mode',
+      'file-added',
+      'file-updated',
+      'file-removed',
     ];
     if (validChannels.includes(channel)) {
       // Remove any existing listeners to avoid duplicates
@@ -83,16 +88,23 @@ contextBridge.exposeInMainWorld("electron", {
     },
     removeListener: (channel, func) => {
       const validChannels = [
-        "folder-selected",
-        "file-list-data",
-        "file-processing-status",
-        "startup-mode",
-        "file-added",
-        "file-updated",
-        "file-removed"
+        'folder-selected',
+        'file-list-data',
+        'file-processing-status',
+        'startup-mode',
+        'file-added',
+        'file-updated',
+        'file-removed',
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeListener(channel, (event, ...args) => func(...args));
+      }
+    },
+    invoke: (channel, data) => {
+      // whitelist channels
+      const validChannels = ['get-ignore-patterns'];
+      if (validChannels.includes(channel)) {
+        return ipcRenderer.invoke(channel, data);
       }
     },
   },
