@@ -4,7 +4,7 @@ on:
   workflow_dispatch: # Allow manual triggering
   push:
     tags:
-      - "debug-v*" # Special tag prefix for debugging
+      - 'debug-v*' # Special tag prefix for debugging
 
 jobs:
   debug_build:
@@ -37,7 +37,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: "npm"
+          cache: 'npm'
 
       - name: Node.js & NPM Info
         run: |
@@ -123,7 +123,7 @@ jobs:
           files: release-builds/**/*
           draft: true
           prerelease: true
-          name: "Debug Build ${{ github.ref_name }}"
+          name: 'Debug Build ${{ github.ref_name }}'
           body: |
             This is a debug build created by the debug-build workflow.
             OS: ${{ runner.os }}

@@ -1,7 +1,7 @@
-import React from "react";
-import { FileCardProps } from "../types/FileTypes";
-import { Plus, X, FileText } from "lucide-react";
-import CopyButton from "./CopyButton";
+import React from 'react';
+import { FileCardProps } from '../types/FileTypes';
+import { Plus, X, FileText } from 'lucide-react';
+import CopyButton from './CopyButton';
 
 interface FileCardComponentProps {
   file: {
@@ -14,18 +14,14 @@ interface FileCardComponentProps {
   toggleSelection: (path: string) => void;
 }
 
-const FileCard = ({
-  file,
-  isSelected,
-  toggleSelection,
-}: FileCardComponentProps) => {
+const FileCard = ({ file, isSelected, toggleSelection }: FileCardComponentProps) => {
   const { name, path: filePath, tokenCount } = file;
 
   // Format token count for display
   const formattedTokens = tokenCount.toLocaleString();
 
   return (
-    <div className={`file-card ${isSelected ? "selected" : ""}`}>
+    <div className={`file-card ${isSelected ? 'selected' : ''}`}>
       <div className="file-card-header">
         <div className="file-card-icon">
           <FileText size={16} />
@@ -40,12 +36,12 @@ const FileCard = ({
         <button
           className="file-card-action"
           onClick={() => toggleSelection(filePath)}
-          title={isSelected ? "Remove from selection" : "Add to selection"}
+          title={isSelected ? 'Remove from selection' : 'Add to selection'}
         >
           {isSelected ? <X size={16} /> : <Plus size={16} />}
         </button>
         <CopyButton text={file.content} className="file-card-action">
-          {""}
+          {''}
         </CopyButton>
       </div>
     </div>
