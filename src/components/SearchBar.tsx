@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Search, X } from "lucide-react";
+import React, { useState } from 'react';
+import { Search, X } from 'lucide-react';
 
 interface SearchBarProps {
   searchTerm: string;
@@ -7,15 +7,11 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
-const SearchBar = ({
-  searchTerm,
-  onSearchChange,
-  placeholder = "Search...",
-}: SearchBarProps) => {
+const SearchBar = ({ searchTerm, onSearchChange, placeholder = 'Search...' }: SearchBarProps) => {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <div className={`search-bar ${isFocused ? "focused" : ""}`}>
+    <div className={`search-bar ${isFocused ? 'focused' : ''}`}>
       <div className="search-icon">
         <Search size={16} />
       </div>
@@ -31,7 +27,7 @@ const SearchBar = ({
       {searchTerm && (
         <button
           className="search-clear-btn"
-          onClick={() => onSearchChange("")}
+          onClick={() => onSearchChange('')}
           aria-label="Clear search"
         >
           <X size={14} />

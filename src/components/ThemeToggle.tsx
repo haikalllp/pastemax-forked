@@ -1,31 +1,31 @@
-import React from "react";
-import { useTheme } from "../context/ThemeContext";
-import { Sun, Moon, Monitor } from "lucide-react";
+import React from 'react';
+import { useTheme } from '../context/ThemeContext';
+import { Sun, Moon, Monitor } from 'lucide-react';
 
 const ThemeToggle = (): JSX.Element => {
   const { theme, setTheme } = useTheme();
-  
+
   return (
     <div className="theme-segmented-control">
       <button
-        className={`theme-segment ${theme === "light" ? "active" : ""}`}
-        onClick={() => setTheme("light")}
+        className={`theme-segment ${theme === 'light' ? 'active' : ''}`}
+        onClick={() => setTheme('light')}
         title="Light Mode"
       >
         <Sun size={16} />
         <span>Light</span>
       </button>
       <button
-        className={`theme-segment ${theme === "dark" ? "active" : ""}`}
-        onClick={() => setTheme("dark")}
+        className={`theme-segment ${theme === 'dark' ? 'active' : ''}`}
+        onClick={() => setTheme('dark')}
         title="Dark Mode"
       >
         <Moon size={16} />
         <span>Dark</span>
       </button>
       <button
-        className={`theme-segment ${theme === "system" ? "active" : ""}`}
-        onClick={() => setTheme("system")}
+        className={`theme-segment ${theme === 'system' ? 'active' : ''}`}
+        onClick={() => setTheme('system')}
         title="Use System Settings"
       >
         <Monitor size={16} />
@@ -35,4 +35,4 @@ const ThemeToggle = (): JSX.Element => {
   );
 };
 
-export default ThemeToggle; 
+export default ThemeToggle;

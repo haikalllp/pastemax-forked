@@ -21,14 +21,14 @@ You can modify the list of excluded files by editing the `excluded-files.js` fil
 ```javascript
 module.exports = {
   excludedFiles: [
-    "package-lock.json",
-    "*.min.js",
-    "node_modules/**",
+    'package-lock.json',
+    '*.min.js',
+    'node_modules/**',
     // Add your custom patterns here
   ],
   binaryExtensions: [
-    ".svg",
-    ".jpg",
+    '.svg',
+    '.jpg',
     // Add your custom binary extensions here
   ],
 };
