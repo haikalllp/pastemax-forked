@@ -1,3 +1,5 @@
+export type IgnoreMode = 'automatic' | 'global';
+
 export interface FileData {
   name: string;
   path: string;
@@ -15,11 +17,12 @@ export interface TreeNode {
   id: string;
   name: string;
   path: string;
-  type: "file" | "directory";
+  type: 'file' | 'directory';
   children?: TreeNode[];
   isExpanded?: boolean;
   level: number;
   fileData?: FileData;
+  hasBinaries?: boolean;
 }
 
 export interface SidebarProps {

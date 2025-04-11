@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { SidebarProps, TreeNode } from "../types/FileTypes";
-import SearchBar from "./SearchBar";
-import TreeItem from "./TreeItem";
+import React, { useState, useEffect } from 'react';
+import { SidebarProps, TreeNode } from '../types/FileTypes';
+import SearchBar from './SearchBar';
+import TreeItem from './TreeItem';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
  * While not all utilities are used directly, they're kept for consistency and future use.
  */
-import { normalizePath, join, isSubPath, arePathsEqual } from "../utils/pathUtils";
+import { normalizePath, join, isSubPath, arePathsEqual } from '../utils/pathUtils';
 
 /**
  * The Sidebar component displays a tree view of files and folders, allowing users to:
@@ -45,27 +45,34 @@ const Sidebar = ({
     setIsResizing(true);
   };
 
-  // Handle resize effect
+  // Handle resize effect - optimized with requestAnimationFrame and passive listeners
   useEffect(() => {
-    const handleResize = (e: any) => {
-      if (isResizing) {
-        const newWidth = e.clientX;
-        if (newWidth >= MIN_SIDEBAR_WIDTH && newWidth <= MAX_SIDEBAR_WIDTH) {
-          setSidebarWidth(newWidth);
-        }
-      }
+    let animationFrameId: number;
+
+    const handleResize = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      // Use requestAnimationFrame for smoother updates
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = requestAnimationFrame(() => {
+        const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(e.clientX, MAX_SIDEBAR_WIDTH));
+        setSidebarWidth(newWidth);
+      });
     };
 
     const handleResizeEnd = () => {
+      cancelAnimationFrame(animationFrameId);
       setIsResizing(false);
     };
 
-    document.addEventListener("mousemove", handleResize);
-    document.addEventListener("mouseup", handleResizeEnd);
+    // Use passive event listeners for better performance
+    document.addEventListener('mousemove', handleResize, { passive: true });
+    document.addEventListener('mouseup', handleResizeEnd, { passive: true });
 
     return () => {
-      document.removeEventListener("mousemove", handleResize);
-      document.removeEventListener("mouseup", handleResizeEnd);
+      cancelAnimationFrame(animationFrameId);
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', handleResizeEnd);
     };
   }, [isResizing]);
 
@@ -78,7 +85,7 @@ const Sidebar = ({
     }
 
     const buildTree = () => {
-      console.log("Building file tree from", allFiles.length, "files");
+      console.log('Building file tree from', allFiles.length, 'files');
       setIsTreeBuildingComplete(false);
 
       try {
@@ -92,11 +99,12 @@ const Sidebar = ({
           // Normalize both the selectedFolder and file.path
           const normalizedSelectedFolder = selectedFolder ? normalizePath(selectedFolder) : '';
           const normalizedFilePath = normalizePath(file.path);
-          
+
           // Get the relative path by removing the selectedFolder prefix if it exists
-          const relativePath = normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
-            ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1) // +1 for the trailing slash
-            : normalizedFilePath;
+          const relativePath =
+            normalizedSelectedFolder && isSubPath(normalizedSelectedFolder, normalizedFilePath)
+              ? normalizedFilePath.substring(normalizedSelectedFolder.length + 1) // +1 for the trailing slash
+              : normalizedFilePath;
 
           const parts = relativePath.split('/');
           let currentPath = '';
@@ -109,19 +117,19 @@ const Sidebar = ({
 
             // Build the current path segment
             currentPath = currentPath ? join(currentPath, part) : part;
-            
+
             // For directory paths, prepend selectedFolder only for the full path
             const fullPath = normalizedSelectedFolder
               ? join(normalizedSelectedFolder, currentPath)
               : currentPath;
-            
+
             if (i === parts.length - 1) {
               // This is a file
               current[part] = {
                 id: `node-${file.path}`,
                 name: part,
                 path: file.path, // Keep the original file path
-                type: "file",
+                type: 'file',
                 level: i,
                 fileData: file,
               };
@@ -132,7 +140,7 @@ const Sidebar = ({
                   id: `node-${fullPath}`,
                   name: part,
                   path: fullPath,
-                  type: "directory",
+                  type: 'directory',
                   level: i,
                   children: {},
                 };
@@ -142,56 +150,58 @@ const Sidebar = ({
           }
         });
 
-        // Convert the nested object structure to the TreeNode array format
-        const convertToTreeNodes = (
-          node: Record<string, any>,
-          level = 0,
-        ): TreeNode[] => {
+        // Function to check if a directory contains binary files
+        const hasBinaryFiles = (files: TreeNode[]): boolean => {
+          return files.some((node) => {
+            if (node.type === 'file') {
+              return node.fileData?.isBinary || false;
+            }
+            return node.children ? hasBinaryFiles(node.children) : false;
+          });
+        };
+
+        // Convert nested object structure to TreeNode array format
+        const convertToTreeNodes = (node: Record<string, any>, level = 0): TreeNode[] => {
           return Object.keys(node).map((key) => {
             const item = node[key];
 
-            if (item.type === "file") {
+            if (item.type === 'file') {
               return item as TreeNode;
             } else {
               const children = convertToTreeNodes(item.children, level + 1);
               const isExpanded =
-                expandedNodes[item.id] !== undefined
-                  ? expandedNodes[item.id]
-                  : true; // Default to expanded if not in state
+                expandedNodes[item.id] !== undefined ? expandedNodes[item.id] : true;
+
+              // Check if this directory contains any binary files
+              const hasBinaries = hasBinaryFiles(children);
 
               return {
                 ...item,
                 children: children.sort((a, b) => {
-                  // Sort directories first
-                  if (a.type === "directory" && b.type === "file") return -1;
-                  if (a.type === "file" && b.type === "directory") return 1;
-
-                  // Sort files by token count (largest first)
-                  if (a.type === "file" && b.type === "file") {
+                  if (a.type === 'directory' && b.type === 'file') return -1;
+                  if (a.type === 'file' && b.type === 'directory') return 1;
+                  if (a.type === 'file' && b.type === 'file') {
                     const aTokens = a.fileData?.tokenCount || 0;
                     const bTokens = b.fileData?.tokenCount || 0;
                     return bTokens - aTokens;
                   }
-
-                  // Default to alphabetical
                   return a.name.localeCompare(b.name);
                 }),
                 isExpanded,
+                hasBinaries,
               };
             }
           });
         };
 
-        // Convert to proper tree structure
+        // Convert to proper tree structure and sort the top level
         const treeRoots = convertToTreeNodes(fileMap);
-
-        // Sort the top level (directories first, then by name)
         const sortedTree = treeRoots.sort((a, b) => {
-          if (a.type === "directory" && b.type === "file") return -1;
-          if (a.type === "file" && b.type === "directory") return 1;
+          if (a.type === 'directory' && b.type === 'file') return -1;
+          if (a.type === 'file' && b.type === 'directory') return 1;
 
           // Sort files by token count (largest first)
-          if (a.type === "file" && b.type === "file") {
+          if (a.type === 'file' && b.type === 'file') {
             const aTokens = a.fileData?.tokenCount || 0;
             const bTokens = b.fileData?.tokenCount || 0;
             return bTokens - aTokens;
@@ -203,7 +213,7 @@ const Sidebar = ({
         setFileTree(sortedTree);
         setIsTreeBuildingComplete(true);
       } catch (err) {
-        console.error("Error building file tree:", err);
+        console.error('Error building file tree:', err);
         setFileTree([]);
         setIsTreeBuildingComplete(true);
       }
@@ -221,11 +231,8 @@ const Sidebar = ({
     // Function to apply expanded state to nodes
     const applyExpandedState = (nodes: TreeNode[]): TreeNode[] => {
       return nodes.map((node: TreeNode): TreeNode => {
-        if (node.type === "directory") {
-          const isExpanded =
-            expandedNodes[node.id] !== undefined
-              ? expandedNodes[node.id]
-              : true; // Default to expanded if not in state
+        if (node.type === 'directory') {
+          const isExpanded = expandedNodes[node.id] !== undefined ? expandedNodes[node.id] : true; // Default to expanded if not in state
 
           return {
             ...node,
@@ -249,7 +256,7 @@ const Sidebar = ({
       result.push(node);
 
       // If it's a directory and it's expanded, add its children
-      if (node.type === "directory" && node.isExpanded && node.children) {
+      if (node.type === 'directory' && node.isExpanded && node.children) {
         result = [...result, ...flattenTree(node.children)];
       }
     });
@@ -269,7 +276,7 @@ const Sidebar = ({
       if (node.name.toLowerCase().includes(lowerTerm)) return true;
 
       // If it's a file, we're done
-      if (node.type === "file") return false;
+      if (node.type === 'file') return false;
 
       // For directories, check if any children match
       if (node.children) {
@@ -282,7 +289,7 @@ const Sidebar = ({
     // Filter the nodes
     return nodes.filter(nodeMatches).map((node) => {
       // If it's a directory, also filter its children
-      if (node.type === "directory" && node.children) {
+      if (node.type === 'directory' && node.children) {
         return {
           ...node,
           children: filterTree(node.children, term),

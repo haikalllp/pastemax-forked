@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 /**
  * Props interface for the UserInstructions component
@@ -12,14 +12,14 @@ interface UserInstructionsProps {
 
 /**
  * UserInstructions Component
- * 
+ *
  * This component provides a text area for users to enter custom instructions
  * that will be appended to the end of the copied content. This is useful for
  * adding context, requirements, or special notes when sharing code snippets.
- * 
+ *
  * The instructions are rendered within <instructions> tags in the final output
  * after all selected file content.
- * 
+ *
  * @param {string} instructions - Current instructions text value
  * @param {function} setInstructions - State setter function for updating instructions
  * @returns {JSX.Element} - The rendered component
@@ -34,7 +34,7 @@ const UserInstructions = ({
       <div className="content-header">
         <div className="content-title">User Instructions</div>
       </div>
-      
+
       {/* Instructions input container */}
       <div className="user-instructions-container">
         <div className="user-instructions">
@@ -45,8 +45,8 @@ const UserInstructions = ({
             placeholder="Enter your instructions here..."
             rows={4}
             style={{
-              width: "100%",
-              resize: "none",
+              width: '100%',
+              resize: 'none',
             }}
           />
         </div>

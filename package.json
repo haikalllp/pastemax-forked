@@ -1,13 +1,13 @@
 {
   "name": "pastemax",
-  "version": "1.2.1",
-  "main": "main.js",
+  "version": "1.2.2",
+  "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "vite",
-    "dev:electron": "node dev.js",
+    "dev:electron": "node electron/dev.js",
     "build": "vite build",
-    "build:electron": "node build.js",
+    "build:electron": "node electron/build.js",
     "clean": "rimraf dist release-builds node_modules",
     "verify-build": "node scripts/verify-build.js",
     "test-build": "node scripts/test-local-build.js",
@@ -21,9 +21,13 @@
     "package:linux": "vite build && electron-builder --linux --publish=never",
     "package:all": "vite build && electron-builder -mwl --publish=never",
     "release": "vite build && electron-builder --publish=onTagOrDraft",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
-    "lint:strict": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "lint": "eslint . --ext ts,tsx,js,jsx --report-unused-disable-directives",
+    "lint:strict": "eslint . --ext ts,tsx,js,jsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext ts,tsx,js,jsx --report-unused-disable-directives --fix",
+    "preview": "vite preview",
+    "update:all": "npm update --save && npm update --save-dev",
+    "format:all": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [
     "clipboard",
@@ -46,9 +50,7 @@
     },
     "files": [
       "dist/**/*",
-      "main.js",
-      "preload.js",
-      "excluded-files.js",
+      "electron/**/*",
       "node_modules/**/*"
     ],
     "mac": {
@@ -90,28 +92,32 @@
   },
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
-    "@types/node": "^20.10.5",
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
-    "@typescript-eslint/parser": "^6.14.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "electron": "^34.3.0",
+    "@types/node": "^20.17.30",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.5.1",
     "electron-builder": "^24.13.3",
-    "eslint": "^8.55.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.5",
+    "esbuild": "^0.25.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.2",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "prettier": "^3.5.3",
     "rimraf": "^5.0.10",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.8"
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6"
   },
   "dependencies": {
     "chokidar": "^3.6.0",
     "gpt-3-encoder": "^1.1.4",
     "ignore": "^7.0.3",
     "lucide-react": "^0.477.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "p-queue": "^8.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tiktoken": "^1.0.20"
   }
 }
