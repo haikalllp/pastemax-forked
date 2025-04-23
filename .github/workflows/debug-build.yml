@@ -93,9 +93,9 @@ jobs:
         run: |
           echo "==== BUILDING APPLICATION ===="
           npm run build
-          
+
           echo "==== BUILD OUTPUT ===="
-          if [ "${{ runner.os }}" == "Windows" ]; then
+          if [ "${{ runner.os }}" = "Windows" ]; then
             dir dist || echo "dist directory not found!"
             if (Test-Path dist) { (Get-ChildItem -Recurse -File dist | Measure-Object).Count } else { echo "No files in dist" }
           else

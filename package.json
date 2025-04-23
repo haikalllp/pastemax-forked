@@ -82,7 +82,10 @@
         "rpm"
       ],
       "category": "Development",
-      "icon": "public/favicon.png"
+      "icon": "public/favicon.png",
+      "maintainer": "kleneway, Haikalllp",
+      "vendor": "kleneway",
+      "synopsis": "A modern file viewer for developers"
     },
     "asarUnpack": [
       "node_modules/ignore/**",

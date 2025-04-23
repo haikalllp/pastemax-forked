@@ -31,7 +31,7 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Cache electron-builder cache
         uses: actions/cache@v4
         with:
@@ -97,11 +97,13 @@ jobs:
           name: linux-artifacts
           path: |
             release-builds/pastemax_*_amd64.deb
-            release-builds/pastemax_*_amd64.rpm
+            release-builds/PasteMax*.AppImage
             release-builds/*.AppImage
             release-builds/pastemax *.AppImage
             release-builds/pastemax_*.AppImage
             release-builds/pastemax-*.AppImage
+            release-builds/pastemax-*-*.*.rpm
+            release-builds/pastemax_*_amd64.rpm
           if-no-files-found: error
 
       # Create GitHub release
@@ -110,12 +112,17 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
+            # macOS
             ${{ matrix.os == 'macos-latest' && 'release-builds/PasteMax-*.dmg' || '' }}
             ${{ matrix.os == 'macos-latest' && 'release-builds/PasteMax-*-mac.zip' || '' }}
+
+            # windows
             ${{ matrix.os == 'windows-latest' && 'release-builds/PasteMax [0-9]*.exe' || '' }}
             ${{ matrix.os == 'windows-latest' && 'release-builds/PasteMax Setup [0-9]*.exe' || '' }}
+
+            # linux
             ${{ matrix.os == 'ubuntu-latest' && 'release-builds/pastemax_*_amd64.deb' || '' }}
-            ${{ matrix.os == 'ubuntu-latest' && 'release-builds/pastemax_*_amd64.rpm' || '' }}
+            ${{ matrix.os == 'ubuntu-latest' && 'release-builds/pastemax-*-*.*.rpm' || '' }}
             ${{ matrix.os == 'ubuntu-latest' && 'release-builds/*.AppImage' || '' }}
           fail_on_unmatched_files: false
           draft: true
