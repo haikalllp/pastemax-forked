@@ -58,6 +58,7 @@ const STORAGE_KEYS = {
   EXPANDED_NODES: 'pastemax-expanded-nodes',
   IGNORE_MODE: 'pastemax-ignore-mode',
   IGNORE_SETTINGS_MODIFIED: 'pastemax-ignore-settings-modified',
+  INCLUDE_BINARY_PATHS: 'pastemax-include-binary-paths',
 };
 
 /* ============================== MAIN APP COMPONENT ============================== */
@@ -109,6 +110,9 @@ const App = (): JSX.Element => {
     message: string;
   });
   const [includeFileTree, setIncludeFileTree] = useState(false);
+  const [includeBinaryPaths, setIncludeBinaryPaths] = useState(
+    localStorage.getItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS) === 'true'
+  );
 
   /* ============================== STATE: UI Controls ============================== */
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -207,6 +211,11 @@ const App = (): JSX.Element => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.IGNORE_MODE, ignoreMode);
   }, [ignoreMode]);
+
+  // Persist includeBinaryPaths when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS, String(includeBinaryPaths));
+  }, [includeBinaryPaths]);
 
   // Add this new useEffect for safe mode detection
   useEffect(() => {
@@ -344,11 +353,15 @@ const App = (): JSX.Element => {
 
   const stableHandleFileListData = useCallback(
     (files: FileData[]) => {
-      console.log('[handleFileListData] Received file list data:', files.length, 'files');
-      console.log('[handleFileListData] Current selectedFiles:', selectedFiles.length);
-
       setAllFiles((prevFiles: FileData[]) => {
-        console.log('[handleFileListData] Previous allFiles count:', prevFiles.length);
+        if (files.length !== prevFiles.length) {
+          console.debug(
+            '[handleFileListData] Updating files from',
+            prevFiles.length,
+            'to',
+            files.length
+          );
+        }
         return files;
       });
 
@@ -375,7 +388,7 @@ const App = (): JSX.Element => {
       } else {
         console.log('[handleFileListData] No existing selections, selecting all eligible files');
         const selectablePaths = files
-          .filter((file: FileData) => !file.isBinary && !file.isSkipped && !file.excludedByDefault)
+          .filter((file: FileData) => !file.isSkipped && !file.excludedByDefault)
           .map((file: FileData) => file.path);
 
         setSelectedFiles(selectablePaths);
@@ -539,7 +552,7 @@ const App = (): JSX.Element => {
         return updatedFiles;
       });
       // Optionally auto-select the new file if it meets criteria
-      if (!newFile.isBinary && !newFile.isSkipped && !newFile.excludedByDefault) {
+      if (!newFile.isSkipped && !newFile.excludedByDefault) {
         setSelectedFiles((prev: string[]) => [...prev, normalizePath(newFile.path)]);
       }
     };
@@ -602,11 +615,8 @@ const App = (): JSX.Element => {
 
   // Toggle folder selection (select/deselect all files in folder)
   const toggleFolderSelection = (folderPath: string, isSelected: boolean) => {
-    console.log('toggleFolderSelection called with:', { folderPath, isSelected });
-
     // Normalize the folder path for cross-platform compatibility
     const normalizedFolderPath = normalizePath(folderPath);
-    console.log('Normalized folder path:', normalizedFolderPath);
 
     // Function to check if a file is in the given folder or its subfolders
     const isFileInFolder = (filePath: string, folderPath: string): boolean => {
@@ -631,7 +641,7 @@ const App = (): JSX.Element => {
         isSubPath(normalizedFolderPath, normalizedFilePath);
 
       if (isMatch) {
-        console.log(`File ${normalizedFilePath} is in folder ${normalizedFolderPath}`);
+        // File is in folder
       }
 
       return isMatch;
@@ -640,7 +650,7 @@ const App = (): JSX.Element => {
     // Filter all files to get only those in this folder (and subfolders) that are selectable
     const filesInFolder = allFiles.filter((file: FileData) => {
       const inFolder = isFileInFolder(file.path, normalizedFolderPath);
-      const selectable = !file.isBinary && !file.isSkipped && !file.excludedByDefault;
+      const selectable = !file.isSkipped && !file.excludedByDefault;
       return selectable && inFolder;
     });
 
@@ -648,19 +658,18 @@ const App = (): JSX.Element => {
 
     // If no selectable files were found, do nothing
     if (filesInFolder.length === 0) {
-      console.log('No selectable files found in folder, nothing to do');
+      console.warn('No selectable files found in folder, nothing to do');
       return;
     }
 
     // Extract just the paths from the files and normalize them
     const folderFilePaths = filesInFolder.map((file: FileData) => normalizePath(file.path));
-    console.log('File paths in folder:', folderFilePaths);
 
     if (isSelected) {
       // Adding files - create a new Set with all existing + new files
       setSelectedFiles((prev: string[]) => {
         const existingSelection = new Set(prev.map(normalizePath));
-        folderFilePaths.forEach((path: string) => existingSelection.add(path));
+        folderFilePaths.forEach((pathToAdd: string) => existingSelection.add(pathToAdd));
         const newSelection = Array.from(existingSelection);
         console.log(
           `Added ${folderFilePaths.length} files to selection, total now: ${newSelection.length}`
@@ -672,9 +681,6 @@ const App = (): JSX.Element => {
       setSelectedFiles((prev: string[]) => {
         const newSelection = prev.filter(
           (path: string) => !isFileInFolder(path, normalizedFolderPath)
-        );
-        console.log(
-          `Removed ${prev.length - newSelection.length} files from selection, total now: ${newSelection.length}`
         );
         return newSelection;
       });
@@ -728,6 +734,7 @@ const App = (): JSX.Element => {
       includeFileTree,
       selectedFolder,
       userInstructions,
+      includeBinaryPaths,
     });
   };
 
@@ -736,7 +743,7 @@ const App = (): JSX.Element => {
     console.time('selectAllFiles');
     try {
       const selectablePaths = displayedFiles
-        .filter((file: FileData) => !file.isBinary && !file.isSkipped)
+        .filter((file: FileData) => !file.isSkipped)
         .map((file: FileData) => normalizePath(file.path)); // Normalize paths here
 
       setSelectedFiles((prev: string[]) => {
@@ -913,14 +920,31 @@ const App = (): JSX.Element => {
 
                 <div className="copy-button-container">
                   <div className="copy-button-wrapper">
-                    <label className="file-tree-option">
-                      <input
-                        type="checkbox"
-                        checked={includeFileTree}
-                        onChange={() => setIncludeFileTree(!includeFileTree)}
-                      />
-                      <span>Include File Tree</span>
-                    </label>
+                    <div
+                      className="toggle-options-container"
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <label className="file-tree-option" style={{ marginRight: '20px' }}>
+                        <input
+                          type="checkbox"
+                          checked={includeFileTree}
+                          onChange={() => setIncludeFileTree(!includeFileTree)}
+                        />
+                        <span>Include File Tree</span>
+                      </label>
+                      <label className="file-tree-option">
+                        <input
+                          type="checkbox"
+                          checked={includeBinaryPaths}
+                          onChange={() => setIncludeBinaryPaths(!includeBinaryPaths)}
+                        />
+                        <span>Include Binary File Paths</span>
+                      </label>
+                    </div>
                     {/*
                      * Copy Button
                      * When clicked, this will copy all selected files along with:

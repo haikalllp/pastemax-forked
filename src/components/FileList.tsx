@@ -13,8 +13,8 @@ const FileList = ({ files, selectedFiles, toggleFileSelection }: FileListProps) 
       files.filter(
         (file: FileData) =>
           selectedFiles.some((selectedPath) => arePathsEqual(selectedPath, file.path)) &&
-          !file.isBinary &&
-          !file.isSkipped
+          !file.isSkipped &&
+          !file.excludedByDefault
       ),
     [files, selectedFiles]
   );

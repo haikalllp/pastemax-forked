@@ -14,6 +14,7 @@ interface FormatContentParams {
   selectedFiles: string[]; // Paths of selected files
   sortOrder: string; // Current sort order (e.g., "tokens-desc")
   includeFileTree: boolean; // Whether to include file tree in output
+  includeBinaryPaths: boolean; // Whether to include binary file paths in output
   selectedFolder: string | null; // Current selected folder path
   userInstructions: string; // User instructions to append to content
 }
@@ -36,6 +37,7 @@ export const formatContentForCopying = ({
   selectedFiles,
   sortOrder,
   includeFileTree,
+  includeBinaryPaths,
   selectedFolder,
   userInstructions,
 }: FormatContentParams): string => {
@@ -61,20 +63,28 @@ export const formatContentForCopying = ({
     return 'No files selected.';
   }
 
+  // Separate files into text and binary
+  const normalFiles = sortedSelected.filter((file) => !file.isBinary);
+  const binaryFiles = sortedSelected.filter((file) => file.isBinary);
+
   let concatenatedString = '';
 
   // Add ASCII file tree if enabled within <file_map> tags
   if (includeFileTree && selectedFolder) {
     const normalizedFolder = normalizePath(selectedFolder);
     const asciiTree = generateAsciiFileTree(sortedSelected, selectedFolder);
-    concatenatedString += `<file_map>\n${normalizedFolder}\n${asciiTree}\n</file_map>\n\n`;
+    concatenatedString += `<file_map>\n${normalizedFolder}\n${asciiTree}\n</file_map>`;
+    // Add consistent double newline after section
+    concatenatedString += '\n\n';
   }
 
-  // Add file contents section
-  concatenatedString += `<file_contents>\n`;
+  // Add file contents section with consistent spacing
+  concatenatedString += `<file_contents>`;
+  // Always add newline after opening tag
+  concatenatedString += '\n';
 
-  // Add each file with its path and language-specific syntax highlighting
-  sortedSelected.forEach((file: FileData) => {
+  // Add each text file with its path and language-specific syntax highlighting
+  normalFiles.forEach((file: FileData) => {
     // Use the enhanced getLanguageFromFilename utility for optimal language detection
     const language = getLanguageFromFilename(file.name);
     // Normalize the file path for cross-platform compatibility
@@ -84,12 +94,32 @@ export const formatContentForCopying = ({
     concatenatedString += `File: ${normalizedPath}\n\`\`\`${language}\n${file.content}\n\`\`\`\n\n`;
   });
 
-  concatenatedString += `</file_contents>\n\n`;
+  // Add binary files section if enabled and files exist
+  if (includeBinaryPaths && binaryFiles.length > 0) {
+    // Remove extra newline before binary_files tag for consistency
+    concatenatedString += `<binary_files>\n`;
 
-  // Add user instructions at the end if present
+    // Add each binary file entry
+    binaryFiles.forEach((file: FileData) => {
+      const normalizedPath = normalizePath(file.path);
+      // Get better file type description using language detection
+      const fileType = getLanguageFromFilename(file.name);
+      concatenatedString += `File: ${normalizedPath}\nThis is a file of the type: ${fileType.charAt(0).toUpperCase() + fileType.slice(1)}\n\n`;
+        });
+
+        // Close binary files section with an extra newline for spacing
+        concatenatedString += `</binary_files>\n\n`;
+  }
+
+  // Consistent closing of file_contents section
+  concatenatedString += `</file_contents>`;
+  // Add consistent double newline after section
+  concatenatedString += '\n\n';
+
+  // Add user instructions at the end if present with consistent spacing
   if (userInstructions.trim()) {
     concatenatedString += `<user_instructions>\n${userInstructions.trim()}\n</user_instructions>`;
   }
 
   return concatenatedString;
-};
+}

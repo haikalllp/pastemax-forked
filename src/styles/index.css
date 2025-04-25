@@ -6,7 +6,7 @@
 :root {
   /* Primary Color Palette */
   --color-primary: #0e639c;
-  --color-primary-light: #1177be;
+  --color-primary-light: #70c0fa;
   --color-primary-dark: #0c5183;
 
   /* Background Colors */
@@ -225,7 +225,8 @@ button.primary {
 }
 
 button.primary:hover {
-  background-color: var(--color-primary-light);
+  background-color: var(--background-primary);
+  color: var(--text-primary);
   border-color: var(--color-primary-light);
 }
 
@@ -477,6 +478,29 @@ input[type='checkbox'][disabled] {
   flex: 1; /* Take remaining vertical space */
   overflow: hidden; /* Crucial for child scrolling */
   height: calc(100% - 73px); /* Adjust based on actual header height */
+}
+
+/* ===========================================================================
+    File Card Styles - Binary File
+   ========================================================================== */
+
+/* File card styles for binary files */
+.file-card.binary-card {
+  background-color: var(--background-tertiary);
+  border-left: 3px solid var(--error-color);
+}
+
+.file-card.binary-card .file-card-icon svg {
+  color: var(--error-color);
+}
+
+.file-card-binary-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  margin-left: var(--space-md); /* Move to the right by using auto margin */
+  border-radius: 4px;
+  background-color: rgba(139, 0, 0, 0.6); /* Dark Red with reduced opacity */
+  color: #ffffff; /* White text */
 }
 
 /* -------------------- Sidebar -------------------- */
@@ -737,41 +761,626 @@ input[type='checkbox'][disabled] {
   font-size: 14.5px; /* Using the small font size variable */
 }
 
-.tree-item-tokens,
-.tree-item-badge {
-  font-size: 11px;
+.tree-item-tokens {
+  font-size: 12px;
   color: var(--text-secondary);
-  margin-left: var(--space-md);
-  padding-right: var(--space-xl); /* Increased right padding */
-  white-space: nowrap;
   flex-shrink: 0;
 }
 
-/* Base badge style */
-/* -------------------- Ignore Mode Toggle -------------------- */
-.ignore-mode-toggle {
+/* -------------------- File Tree (in Sidebar - File badges (For Binary Files) -------------------- */
+
+/* Base Badge Style */
+.tree-item-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--hover-color); /* Default background */
+  color: var(--text-secondary); /* Default text color */
+  margin-left: 6px; /* Keep consistent margin */
+  white-space: nowrap;
+}
+
+/* Specific style for individual binary file badges */
+.tree-item-badge-binary-file {
+  background-color: rgba(139, 0, 0, 0.6); /* Dark Red with reduced opacity */
+  color: #ffffff; /* White text */
+}
+
+/* Specific style for folder badges */
+.tree-item-badge-folder {
+  font-style: italic;
+  /* Inherits default background/text color from .tree-item-badge */
+}
+
+/* ==========================================================================
+   Ignore Patterns Viewer
+   ========================================================================== */
+
+/* -------------------- Ignore Patterns Modal -------------------- */
+.ignore-patterns-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  background-color: var(--background-secondary);
-  margin: 12px 0;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
 }
 
-.ignore-mode-toggle button {
-  flex: 1;
-  padding: 6px 12px;
-  border: var(--standard-border);
+.ignore-patterns-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+  transition: opacity 0.2s ease;
+  backdrop-filter: blur(2px); /* Slight blur effect for depth */
+}
+
+.ignore-patterns-modal {
   background-color: var(--background-primary);
-  color: var(--text-primary);
-  transition: all 0.2s ease;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border: var(--standard-border);
+  position: relative;
+  z-index: 1002;
+  animation: scaleIn 0.3s ease-out;
 }
 
-.ignore-mode-toggle button.active {
+.ignore-patterns-header {
+  margin-top: 10px;
+  padding: var(--standard-padding);
+  border-bottom: var(--standard-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ignore-patterns-header h2 {
+  margin: 0;
+  margin-top: 10px;
+  margin-bottom: 20px;
+  margin-left: 25px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.save-button-ignore-patterns {
+  margin-right: 20px;
+  margin-bottom: 10px;
+  color: var(--text-on-primary);
+  background: var(--color-primary);
+  border: 1px var(--border-color) solid;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: var(--border-radius-md);
+  -webkit-border-radius: var(--border-radius-md);
+  -moz-border-radius: var(--border-radius-md);
+  -ms-border-radius: var(--border-radius-md);
+  -o-border-radius: var(--border-radius-md);
+}
+
+.save-button-ignore-patterns:hover {
+  color: var(--text-primary);
+  border-color: var(--color-primary);
+  background-color: var(--hover-color);
+}
+
+.ignore-patterns-search {
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 12px;
+}
+
+.ignore-patterns-search .search-input {
+  width: 100%;
+  padding: 10px 14px;
+  background-color: var(--background-secondary);
+  border: 2px solid #000000; /* Changed from var(--border-color) to black */
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 15px;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.ignore-patterns-search .search-input:hover {
+  border-color: var(--color-primary-light);
+  background-color: var(--background-primary);
+  transform: translateY(-1px);
+  box-shadow: var (--shadow-md);
+}
+
+.ignore-patterns-search .search-input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  background-color: var(--background-primary);
+  box-shadow: var(--focus-ring);
+  transform: translateY(-1px);
+}
+
+.ignore-patterns-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+.ignore-patterns-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.ignore-patterns-sections .ignore-patterns-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background-color: var(--background-secondary);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.ignore-patterns-sections .ignore-patterns-section:hover {
+  border-color: var(--color-primary-light);
+}
+
+.ignore-patterns-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.ignore-patterns-section h3 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ignore-patterns-section .pattern-count {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--background-primary);
+  border-radius: var(--border-radius-pill);
+  border: 1px solid var(--border-color);
+}
+
+.ignore-patterns-section .section-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: -8px;
+  font-style: italic;
+}
+
+.pattern-list {
+  background-color: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+  margin: 0;
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 200px;
+  transition: border-color var(--transition-fast);
+}
+
+.pattern-list:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.ignore-patterns-error {
+  color: var(--error-color);
+  padding: 16px;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.ignore-patterns-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var (--text-secondary);
+  font-size: 14px;
+}
+
+.no-patterns {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 14px;
+  padding: 12px;
+  background-color: var(--background-secondary);
+  border-radius: 4px;
+}
+
+/* Custom Global Ignores Section (Dark Mode) - Matched to ignore-patterns-section */
+.custom-global-ignores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background-color: var(--background-secondary);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.custom-global-ignores:hover {
+  border-color: var(--color-primary-light);
+}
+
+.custom-global-ignores h4 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.custom-global-ignores .custom-ignore-input {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.custom-global-ignores input {
+  flex-grow: 1;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-sm);
+  background-color: var(--background-primary);
+  transition: all var(--transition-fast);
+}
+
+.custom-global-ignores input:hover {
+  border-color: var(--border-color-focus);
+}
+
+.custom-global-ignores input:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.add-pattern-button {
+  background-color: var(--color-primary);
+  color: var(--text-on-primary);
+  border: 1px solid var(--color-primary-dark); /* Added distinct border */
+  border-radius: var(--border-radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-pattern-button:hover {
+  color: var(--text-primary);
+  border-color: var(--color-primary);
+  background-color: var(--hover-color);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.add-pattern-button:active {
+  transform: translateY(0);
+}
+
+.custom-global-ignores .custom-ignore-list ul {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-sm) 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.custom-global-ignores .custom-ignore-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--background-primary);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+  -webkit-border-radius: var(--border-radius-md);
+  -moz-border-radius: var(--border-radius-md);
+  -ms-border-radius: var(--border-radius-md);
+  -o-border-radius: var(--border-radius-md);
+}
+
+.custom-global-ignores .custom-ignore-list li:hover {
+  background-color: var(--hover-color);
+  border-color: var(--color-primary-light);
+}
+
+.remove-pattern-button {
+  background: none;
+  border: none;
+  color: var(--error-color);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.remove-pattern-button:hover {
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+.remove-pattern-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Dark mode specific styles for ignore patterns modal */
+.dark-mode .ignore-patterns-modal {
+  border-color: var(--border-color);
+}
+
+.dark-mode .pattern-list {
+  border: 2px solid var(--border-color);
+}
+
+.dark-mode .ignore-patterns-error {
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+/* ----------------- New Styles for Updated IgnorePatterns Modal ----------------- */
+/* Mode explanation styling */
+.ignore-mode-explanation {
+  margin: 15px auto 20px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background-color: var(--background-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.mode-description {
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.mode-description.active {
+  background-color: var(--background-primary);
+  border-left-color: var(--color-primary);
+  opacity: 1;
+}
+
+.mode-description h4 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.mode-description p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.mode-description code {
+  font-family: var(--font-family-code);
+  background-color: var(--background-tertiary);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+/* Toggle Switch for Ignore Mode */
+.ignore-patterns-mode-toggle {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--background-secondary);
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mode-toggle button {
+  flex: 1;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.mode-toggle button.active {
   background-color: var(--color-primary);
   color: white;
-  border-color: var(--color-primary);
+}
+
+.mode-toggle button:first-child {
+  border-right: 1px solid var(--border-color);
+}
+
+/* Enhanced Search Input */
+.ignore-patterns-search .search-input {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 15px;
+  background-color: var(--background-secondary);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+/* Enhanced Custom Global Ignores Input & Button */
+.custom-global-ignores .custom-ignore-input {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.custom-global-ignores input {
+  flex-grow: 1;
+  border: 1px solid var(--border-color); /* Use standard border color */
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  background-color: var(--background-secondary);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+  margin-bottom: 0; /* Remove bottom margin from input */
+}
+.custom-global-ignores input:hover {
+  border-color: var(--border-color-focus);
+}
+.custom-global-ignores input:focus {
+  border-color: var(--border-color-focus);
+  box-shadow: var(--focus-ring);
+  background-color: var(--background-primary);
+}
+
+/* Empty State */
+.ignore-patterns-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-style: italic;
+}
+/* ToggleSwitch styles with light/dark mode support */
+.toggle-switch {
+  position: relative;
+  width: 180px; /* Reduced width */
+  height: 36px; /* Reduced height */
+  border-radius: 18px; /* Adjusted to match height */
+  background-color: #7d7e84;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px; /* Reduced padding for better centering */
+}
+
+.toggle-switch-inner {
+  position: absolute;
+  top: 3px; /* Adjusted for better vertical centering */
+  width: calc(50% - 6px); /* Adjusted width for better fit */
+  height: calc(100% - 6px); /* Adjusted height for better fit */
+  background-color: var(--color-primary); /* Using primary color (blue) */
+  border-radius: 16px;
+  transition:
+    left 0.3s ease,
+    background-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 500;
+  z-index: 1;
+}
+
+.toggle-switch-inner.off {
+  left: 3px; /* Adjusted for better alignment */
+  background-color: var(--color-primary); /* Grey when off */
+}
+
+.toggle-switch-inner.on {
+  left: calc(50% + 3px); /* Adjusted for better alignment */
+  background-color: var(--color-primary); /* Blue when on */
+}
+
+.toggle-switch .toggle-label {
+  font-size: 13px; /* Reduced font size */
+  font-weight: 500;
+  color: #ffffff;
+  z-index: 2;
+  transition: color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 47.3%;
+  height: 100%;
+}
+
+.toggle-switch .toggle-label.left {
+  text-align: center;
+}
+
+.toggle-switch .toggle-label.right {
+  text-align: center;
+}
+
+.toggle-switch .toggle-label.active {
+  color: white; /* Bright white color for active text in light mode */
+  font-weight: 600;
+}
+
+/* Dark mode adjustments */
+.dark-mode .toggle-switch {
+  background-color: #2c2c2e;
+  border-color: #3a3a3c;
+}
+
+.dark-mode .toggle-switch-inner {
+  background-color: var(--color-primary); /* Using primary color (blue) in dark mode */
+}
+
+.dark-mode .toggle-switch-inner.off {
+  background-color: var(--color-primary);
+}
+
+.dark-mode .toggle-switch .toggle-label {
+  color: var(--text-secondary);
+}
+
+.dark-mode .toggle-switch .toggle-label.active {
+  color: white; /* Keep active text bright white in dark mode too */
 }
 
 /* -------------------- Custom Global Ignores Section -------------------- */
@@ -853,27 +1462,6 @@ input[type='checkbox'][disabled] {
 .custom-global-ignores li button:hover {
   opacity: 0.8;
   background-color: rgba(231, 76, 60, 0.1); /* Light red background on hover */
-}
-.tree-item-badge {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background-color: var(--hover-color); /* Default background */
-  color: var(--text-secondary); /* Default text color */
-  margin-left: 6px; /* Keep consistent margin */
-  white-space: nowrap;
-}
-
-/* Specific style for individual binary file badges */
-.tree-item-badge-binary-file {
-  background-color: rgba(139, 0, 0, 0.7); /* Dark Red with reduced opacity */
-  color: #ffffff; /* White text */
-}
-
-/* Specific style for folder badges */
-.tree-item-badge-folder {
-  font-style: italic;
-  /* Inherits default background/text color from .tree-item-badge */
 }
 
 /* -------------------- File List (in Content Area) -------------------- */
@@ -973,8 +1561,16 @@ input[type='checkbox'][disabled] {
   justify-content: center; /* Center info vertically */
 }
 
-.file-card-tokens,
-.file-card-status {
+.file-card-tokens {
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap; /* Prevent wrapping */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 var(--space-xs); /* Add horizontal padding */
+}
+
+.file-card-file-size {
   color: var(--text-secondary);
   font-size: 13px;
   white-space: nowrap; /* Prevent wrapping */
@@ -1212,11 +1808,12 @@ input[type='text'].search-input:focus {
   padding-bottom: var(--space-xl); /* Increased bottom padding */
   border-top: var(--standard-border);
   display: flex;
-  flex-direction: column;
-  align-items: center; /* Center items horizontally */
+  flex-direction: row; /* Changed from column to row */
+  align-items: center; /* Center items vertically */
+  justify-content: center; /* Center horizontally */
   background-color: var(--background-primary);
   flex-shrink: 0; /* Prevent shrinking */
-  gap: var(--space-md); /* Add vertical gap between checkbox and button */
+  gap: var(--space-md); /* Horizontal gap between elements */
 }
 
 /* Optional: Add a label for the copy button */
@@ -1225,6 +1822,7 @@ input[type='text'].search-input:focus {
   align-items: center;
   color: var(--text-secondary);
   font-size: 14px;
+  margin-right: var(--space-sm); /* Add some spacing to the right */
   /* Add styles as needed */
 }
 
@@ -1251,15 +1849,13 @@ input[type='text'].search-input:focus {
 }
 
 .copy-button.full-width {
-  width: 100%;
-  max-width: 400px; /* Limit max width if needed */
+  /* Modified for side-by-side layout */
+  width: auto; /* Changed from 100% to auto */
+  max-width: none; /* Remove max-width limitation */
 }
 
 .copy-button.copied {
   /* Class added via JS */
-  background-color: var(--success-color) !important; /* Use !important cautiously */
-  border-color: var(--success-color) !important;
-  color: white !important;
   transition: all 0.2s ease;
   animation: flash-success 0.3s ease-out;
 }
@@ -1544,7 +2140,20 @@ textarea::-webkit-scrollbar-thumb {
 }
 
 .dark-mode .file-card-action {
-  background-color: #2c2c2c; /* Darker action button background */
+  background-color: var(--hover-color); /* Darker action button background */
+}
+
+.dark-mode .file-card-action:hover {
+  color: var(--color-primary-light);
+  background-color: var(--hover-color);
+  border-color: var(--color-primary);
+  transform: translateY(-1px); /* Subtle lift effect */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .file-card-action:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* Input/Textarea focus states */
@@ -1626,589 +2235,6 @@ label {
 /* Final check on copy button label color */
 .dark-mode .copy-button-container label {
   color: var(--text-secondary); /* Use secondary text color */
-}
-
-/* -------------------- Ignore Patterns Modal -------------------- */
-.ignore-patterns-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn 0.2s ease-out;
-}
-
-.ignore-patterns-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1001;
-  transition: opacity 0.2s ease;
-}
-
-.ignore-patterns-modal {
-  background-color: var(--background-primary);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  width: 90%;
-  max-width: 700px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  border: var(--standard-border);
-  position: relative;
-  z-index: 1002;
-  animation: scaleIn 0.3s ease-out;
-}
-
-.ignore-patterns-header {
-  margin-top: 10px;
-  margin-bottom: 10px;
-  padding: var(--standard-padding);
-  border-bottom: var(--standard-border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.ignore-patterns-header h2 {
-  margin: 0;
-  margin-top: 10px;
-  margin-bottom: 20px;
-  margin-left: 25px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.save-button-ignore-patterns {
-  margin-right: 20px;
-  margin-bottom: 10px;
-  color: var(--text-on-primary);
-  background: var(--color-primary);
-  border: 1px var(--border-color) solid;
-  font-size: 15px;
-  cursor: pointer;
-  border-radius: var(--border-radius-md);
-  -webkit-border-radius: var(--border-radius-md);
-  -moz-border-radius: var(--border-radius-md);
-  -ms-border-radius: var(--border-radius-md);
-  -o-border-radius: var(--border-radius-md);
-}
-
-.save-button-ignore-patterns:hover {
-  color: var(--text-primary);
-  border-color: var(--color-primary);
-  background-color: var(--hover-color);
-}
-
-.ignore-patterns-search {
-  padding: 0 20px 12px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 12px;
-}
-
-.ignore-patterns-search .search-input {
-  width: 100%;
-  padding: 10px 14px;
-  background-color: var(--background-secondary);
-  border: 2px solid #000000; /* Changed from var(--border-color) to black */
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 15px;
-  transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
-}
-
-.ignore-patterns-search .search-input:hover {
-  border-color: var(--color-primary-light);
-  background-color: var(--background-primary);
-  transform: translateY(-1px);
-  box-shadow: var (--shadow-md);
-}
-
-.ignore-patterns-search .search-input:focus {
-  border-color: var(--color-primary);
-  outline: none;
-  background-color: var(--background-primary);
-  box-shadow: var(--focus-ring);
-  transform: translateY(-1px);
-}
-
-.ignore-patterns-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-md);
-}
-
-.ignore-patterns-sections {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.ignore-patterns-sections .ignore-patterns-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  background-color: var(--background-secondary);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--border-color);
-  transition: all var(--transition-fast);
-}
-
-.ignore-patterns-sections .ignore-patterns-section:hover {
-  border-color: var(--color-primary-light);
-}
-
-.ignore-patterns-section .section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-xs);
-}
-
-.ignore-patterns-section h3 {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.ignore-patterns-section .pattern-count {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  padding: var(--space-xs) var(--space-sm);
-  background-color: var(--background-primary);
-  border-radius: var(--border-radius-pill);
-  border: 1px solid var(--border-color);
-}
-
-.ignore-patterns-section .section-subtitle {
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  margin-top: -8px;
-  font-style: italic;
-}
-
-.pattern-list {
-  background-color: var(--background-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  padding: var(--space-md);
-  margin: 0;
-  font-family: var(--font-family-code);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--text-primary);
-  white-space: pre;
-  overflow-x: auto;
-  max-height: 200px;
-  transition: border-color var(--transition-fast);
-}
-
-.pattern-list:hover {
-  box-shadow: var(--shadow-sm);
-}
-
-.ignore-patterns-error {
-  color: var(--error-color);
-  padding: 16px;
-  background-color: var(--background-secondary);
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.ignore-patterns-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  color: var (--text-secondary);
-  font-size: 14px;
-}
-
-.no-patterns {
-  color: var(--text-secondary);
-  font-style: italic;
-  font-size: 14px;
-  padding: 12px;
-  background-color: var(--background-secondary);
-  border-radius: 4px;
-}
-
-/* Custom Global Ignores Section (Dark Mode) - Matched to ignore-patterns-section */
-.custom-global-ignores {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  background-color: var(--background-secondary);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--border-color);
-  transition: all var(--transition-fast);
-}
-
-.custom-global-ignores:hover {
-  border-color: var(--color-primary-light);
-}
-
-.custom-global-ignores h4 {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.custom-global-ignores .custom-ignore-input {
-  display: flex;
-  gap: var(--space-sm);
-  margin-top: var(--space-sm);
-}
-
-.custom-global-ignores input {
-  flex-grow: 1;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-sm);
-  background-color: var(--background-primary);
-  transition: all var(--transition-fast);
-}
-
-.custom-global-ignores input:hover {
-  border-color: var(--border-color-focus);
-}
-
-.custom-global-ignores input:focus {
-  border-color: var(--color-primary);
-  box-shadow: var(--focus-ring);
-  outline: none;
-}
-
-.add-pattern-button {
-  background-color: var(--color-primary);
-  color: var(--text-on-primary);
-  border: 1px solid var(--color-primary-dark); /* Added distinct border */
-  border-radius: var(--border-radius-md);
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.add-pattern-button:hover {
-  color: var(--text-primary);
-  border-color: var(--color-primary);
-  background-color: var(--hover-color);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.add-pattern-button:active {
-  transform: translateY(0);
-}
-
-.custom-global-ignores .custom-ignore-list ul {
-  list-style: none;
-  padding: 0;
-  margin: var(--space-sm) 0 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.custom-global-ignores .custom-ignore-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: var(--background-primary);
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--border-color);
-  transition: all var(--transition-fast);
-}
-
-.custom-global-ignores .custom-ignore-list li:hover {
-  background-color: var(--hover-color);
-  border-color: var(--color-primary-light);
-}
-
-.remove-pattern-button {
-  background: none;
-  border: none;
-  color: var(--error-color);
-  cursor: pointer;
-  padding: var(--space-xs);
-  border-radius: var(--border-radius-sm);
-  transition: all var(--transition-fast);
-}
-
-.remove-pattern-button:hover {
-  background-color: rgba(231, 76, 60, 0.1);
-}
-
-.remove-pattern-button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-/* Dark mode specific styles for ignore patterns modal */
-.dark-mode .ignore-patterns-modal {
-  border-color: var(--border-color);
-}
-
-.dark-mode .pattern-list {
-  border: 2px solid var(--border-color);
-}
-
-.dark-mode .ignore-patterns-error {
-  background-color: rgba(231, 76, 60, 0.1);
-}
-
-/* ----------------- New Styles for Updated IgnorePatterns Modal ----------------- */
-/* Mode explanation styling */
-.ignore-mode-explanation {
-  margin: 8px auto 20px auto;
-  max-width: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  background-color: var(--background-secondary);
-  border-radius: 8px;
-  padding: 16px;
-  border: 1px solid var(--border-color);
-  font-size: 14px;
-}
-
-.mode-description {
-  padding: 12px;
-  border-radius: 6px;
-  border-left: 3px solid transparent;
-  transition: all 0.2s ease;
-  opacity: 0.7;
-}
-
-.mode-description.active {
-  background-color: var(--background-primary);
-  border-left-color: var(--color-primary);
-  opacity: 1;
-}
-
-.mode-description h4 {
-  margin: 0 0 8px 0;
-  font-size: 15px;
-  color: var(--text-primary);
-}
-
-.mode-description p {
-  margin: 0;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.mode-description code {
-  font-family: var(--font-family-code);
-  background-color: var(--background-tertiary);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 13px;
-}
-
-/* Toggle Switch for Ignore Mode */
-.ignore-patterns-mode-toggle {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 20px;
-}
-
-.mode-toggle {
-  display: inline-flex;
-  align-items: center;
-  background-color: var(--background-secondary);
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.mode-toggle button {
-  flex: 1;
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition:
-    background-color 0.2s,
-    color 0.2s;
-}
-
-.mode-toggle button.active {
-  background-color: var(--color-primary);
-  color: white;
-}
-
-.mode-toggle button:first-child {
-  border-right: 1px solid var(--border-color);
-}
-
-/* Enhanced Search Input */
-.ignore-patterns-search .search-input {
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 15px;
-  background-color: var(--background-secondary);
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
-}
-
-/* Enhanced Custom Global Ignores Input & Button */
-.custom-global-ignores .custom-ignore-input {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.custom-global-ignores input {
-  flex-grow: 1;
-  border: 1px solid var(--border-color); /* Use standard border color */
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 15px;
-  background-color: var(--background-secondary);
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
-  margin-bottom: 0; /* Remove bottom margin from input */
-}
-.custom-global-ignores input:hover {
-  border-color: var(--border-color-focus);
-}
-.custom-global-ignores input:focus {
-  border-color: var(--border-color-focus);
-  box-shadow: var(--focus-ring);
-  background-color: var(--background-primary);
-}
-
-/* Empty State */
-.ignore-patterns-empty-state {
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 16px;
-  font-style: italic;
-}
-/* ToggleSwitch styles with light/dark mode support */
-.toggle-switch {
-  position: relative;
-  width: 180px; /* Reduced width */
-  height: 36px; /* Reduced height */
-  border-radius: 18px; /* Adjusted to match height */
-  background-color: #7d7e84;
-  cursor: pointer;
-  user-select: none;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition:
-    background-color 0.3s ease,
-    border-color 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px; /* Reduced padding for better centering */
-}
-
-.toggle-switch-inner {
-  position: absolute;
-  top: 3px; /* Adjusted for better vertical centering */
-  width: calc(50% - 6px); /* Adjusted width for better fit */
-  height: calc(100% - 6px); /* Adjusted height for better fit */
-  background-color: var(--color-primary); /* Using primary color (blue) */
-  border-radius: 16px;
-  transition:
-    left 0.3s ease,
-    background-color 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 500;
-  z-index: 1;
-}
-
-.toggle-switch-inner.off {
-  left: 3px; /* Adjusted for better alignment */
-  background-color: var(--color-primary); /* Grey when off */
-}
-
-.toggle-switch-inner.on {
-  left: calc(50% + 3px); /* Adjusted for better alignment */
-  background-color: var(--color-primary); /* Blue when on */
-}
-
-.toggle-switch .toggle-label {
-  font-size: 13px; /* Reduced font size */
-  font-weight: 500;
-  color: #ffffff;
-  z-index: 2;
-  transition: color 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 47.3%;
-  height: 100%;
-}
-
-.toggle-switch .toggle-label.left {
-  text-align: center;
-}
-
-.toggle-switch .toggle-label.right {
-  text-align: center;
-}
-
-.toggle-switch .toggle-label.active {
-  color: white; /* Bright white color for active text in light mode */
-  font-weight: 600;
-}
-
-/* Dark mode adjustments */
-.dark-mode .toggle-switch {
-  background-color: #2c2c2e;
-  border-color: #3a3a3c;
-}
-
-.dark-mode .toggle-switch-inner {
-  background-color: var(--color-primary); /* Using primary color (blue) in dark mode */
-}
-
-.dark-mode .toggle-switch-inner.off {
-  background-color: var(--color-primary);
-}
-
-.dark-mode .toggle-switch .toggle-label {
-  color: var(--text-secondary);
-}
-
-.dark-mode .toggle-switch .toggle-label.active {
-  color: white; /* Keep active text bright white in dark mode too */
 }
 
 /* ==========================================================================
@@ -2660,6 +2686,9 @@ button:hover svg.lucide {
   align-items: center;
   justify-content: center;
   z-index: 1000; /* High z-index to be on top */
+  animation: fadeIn 0.2s ease-out; /* Fade in animation */
+  backdrop-filter: blur(2px); /* Slight blur effect for depth */
+  transition: opacity 0.2s ease; /* Smooth transition when closing */
 }
 
 .file-preview-modal {
@@ -2672,6 +2701,12 @@ button:hover svg.lucide {
   max-height: 80vh; /* Max height, viewport relative */
   display: flex;
   flex-direction: column;
+  animation: scaleIn 0.25s ease-out; /* Scale in animation */
+  transform-origin: center; /* Scale from center */
+  will-change: transform, opacity; /* Optimization for animations */
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease; /* For closing animations */
 }
 
 .file-preview-modal-header {
@@ -2679,6 +2714,7 @@ button:hover svg.lucide {
   justify-content: space-between;
   align-items: center;
   padding: 10px 16px;
+
   border-bottom: 1px solid var(--border-color);
 }
 
