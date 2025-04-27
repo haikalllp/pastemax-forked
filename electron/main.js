@@ -1,7 +1,7 @@
 // ======================
 // IMPORTS AND CONSTANTS
 // ======================
-const { app, BrowserWindow, ipcMain, dialog, globalShortcut, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -48,7 +48,8 @@ const DEFAULT_PATTERNS = [
   '.DS_Store',
   'Thumbs.db',
   'desktop.ini',
-  '*.asar', // Added to ignore Electron asar archive files
+  '*.asar',
+  'release-builds',
 ];
 
 // ======================
@@ -1329,6 +1330,15 @@ function createWindow() {
     },
   });
 
+  // handle Escape locally (only when focused), not globally
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // only intercept Esc when our window is focused and a load is in progress
+    if (input.key === 'Escape' && isLoadingDirectory) {
+      cancelDirectoryLoading(mainWindow);
+      event.preventDefault(); // stop further in-app handling
+    }
+  });
+
   // Only verify file existence in production mode
   if (process.env.NODE_ENV !== 'development') {
     // Verify file exists before loading
@@ -1342,16 +1352,9 @@ function createWindow() {
     }
   }
 
-  // Register the escape key to cancel directory loading
-  globalShortcut.register('Escape', () => {
-    if (isLoadingDirectory) {
-      cancelDirectoryLoading(mainWindow);
-    }
-  });
 
   // Clean up watcher when window is closed
   mainWindow.on('closed', () => {
-    globalShortcut.unregisterAll();
     if (currentWatcher) {
       currentWatcher.close().then(() => console.log('File watcher closed.'));
     }
