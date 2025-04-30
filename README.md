@@ -68,32 +68,34 @@ npm run build:electron
 npm run package
 ```
 
-**Note for Windows users**: If you encounter issues with `npm run package`, you can try the platform-specific command:
+**Note**: If you encounter issues with `npm run package`, you can try the platform-specific command:
 
 ```
 npm run package:win
+npm run package:mac
+npm run package:linux
 ```
 
-After successful build, you'll find the executable files in the `release-builds` directory:
+After successful build, you'll find the executable files inside the `release-builds` directory:
 
+**Windows:**
 - `PasteMax Setup 1.0.0.exe` - Installer version
 - `PasteMax 1.0.0.exe` - Portable version
 
+**Mac:**
+- `PasteMax 1.0.0.dmg` - Installer version
+- `PasteMax 1.0.0.zip` - Portable version
+
+**Linx:**
+- `PasteMax 1.0.0.deb` - Installer version (Deb package)
+- `PasteMax 1.0.0.rpm` - Installer version (RPM package)
+- `PasteMax 1.0.0.AppImage` - Portable version
 ## Development
 
 ### Prerequisites
 
 - Node.js (v14 or higher)
 - npm or yarn
-
-### Setup
-
-1. Clone the repository
-2. Install dependencies:
-
-```
-npm install
-```
 
 ### Running in Development Mode
 
@@ -119,12 +121,6 @@ npm run build:electron
 npm run package
 ```
 
-Platform-specific build commands:
-
-- Windows: `npm run package:win`
-- macOS: `npm run package:mac`
-- Linux: `npm run package:linux`
-
 ## Project Structure
 
 - `src/` - React application source code
@@ -144,9 +140,7 @@ Platform-specific build commands:
 - `public/` - Public assets (favicon, etc.)
 - `scripts/` - Utility scripts for building and testing
 - `docs/` - Documentation
-  - `excluded-files.md` - Documentation for the file exclusion feature
-  - `plans/` - Future development plans and features
-  - `repoPromptInstructions/` - Instructions for prompt-related features
+
 
 ## Libraries Used
 
@@ -158,9 +152,6 @@ Platform-specific build commands:
 - ignore - .gitignore-style pattern matching for file exclusions
 - chokidar - File Watcher
 
-## Customization
-
-You can customize which files are excluded by default by editing the `excluded-files.js` file. See the [excluded files documentation](docs/excluded-files.md) for more details.
 
 ## Troubleshooting
 
@@ -190,18 +181,6 @@ This is caused by dependencies not being properly included in the package. To fi
 
 3. Install the new version
 
-### Build Command Issues
-
-If you encounter issues with the standard `npm run package` command:
-
-1. Try using the platform-specific build command:
-
-   - Windows: `npm run package:win`
-   - macOS: `npm run package:mac`
-   - Linux: `npm run package:linux`
-
-2. Check the `release-builds` directory for output files after building
-
 ### Other Issues
 
 If you encounter other issues, please [report them on GitHub](https://github.com/kleneway/pastemax/issues).
@@ -219,3 +198,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Star History ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=kleneway/pastemax&type=Date)](https://www.star-history.com/#kleneway/pastemax&Date)
+
+---
