@@ -12,36 +12,36 @@
 
 **File: `config.js`**
 
-*   [ ] Create the file `electron/config.js`.
-*   [ ] Add `require('os')` at the top.
-*   [ ] Add `require('path')` at the top.
-*   [ ] Move `MAX_DIRECTORY_LOAD_TIME` constant from `main.js` to `config.js` and export it.
-*   [ ] Move `MAX_FILE_SIZE` constant from `main.js` to `config.js` and export it.
-*   [ ] Move `CONCURRENT_DIRS` constant definition (using `os.cpus().length`) from `main.js` to `config.js` and export it.
-*   [ ] Move `STATUS_UPDATE_INTERVAL` constant from `main.js` to `config.js` and export it.
-*   [ ] Move `DEFAULT_PATTERNS` array constant from `main.js` to `config.js` and export it.
-*   [ ] Add `require('./excluded-files.js')` to import `excludedFiles` and `binaryExtensions`.
-*   [ ] Re-export `excludedFiles` from `excluded-files.js` via `config.js`.
-*   [ ] Re-export `binaryExtensions` from `excluded-files.js` via `config.js`.
-*   [ ] Add JSDoc comments explaining the purpose of each exported constant/variable.
+*   [x] Create the file `electron/config.js`.
+*   [x] Add `require('os')` at the top.
+*   [x] Add `require('path')` at the top.
+*   [x] Move `MAX_DIRECTORY_LOAD_TIME` constant from `main.js` to `config.js` and export it.
+*   [x] Move `MAX_FILE_SIZE` constant from `main.js` to `config.js` and export it.
+*   [x] Move `CONCURRENT_DIRS` constant definition (using `os.cpus().length`) from `main.js` to `config.js` and export it.
+*   [x] Move `STATUS_UPDATE_INTERVAL` constant from `main.js` to `config.js` and export it.
+*   [x] Move `DEFAULT_PATTERNS` array constant from `main.js` to `config.js` and export it.
+*   [x] Add `require('./excluded-files.js')` to import `excludedFiles` and `binaryExtensions`.
+*   [x] Re-export `excludedFiles` from `excluded-files.js` via `config.js`.
+*   [x] Re-export `binaryExtensions` from `excluded-files.js` via `config.js`.
+*   [x] Add JSDoc comments explaining the purpose of each exported constant/variable.
 
 **File: `utils.js`**
 
-*   [ ] Verify `normalizePath` function exists and is exported.
-*   [ ] Verify `ensureAbsolutePath` function exists and is exported.
-*   [ ] Verify `safeRelativePath` function exists and is exported.
-*   [ ] Verify `safePathJoin` function exists and is exported.
-*   [ ] Verify `isValidPath` function exists and is exported.
-*   [ ] Ensure `require('path')` is present.
-*   [ ] Ensure no other logic resides in `utils.js` beyond these path utilities.
-*   [ ] Remove the commented-out `// processSingleFile` export if present.
-*   [ ] *Remove* the `require('./excluded-files')` line from `utils.js` (it's not used there).
+*   [x] Verify `normalizePath` function exists and is exported.
+*   [x] Verify `ensureAbsolutePath` function exists and is exported.
+*   [x] Verify `safeRelativePath` function exists and is exported.
+*   [x] Verify `safePathJoin` function exists and is exported.
+*   [x] Verify `isValidPath` function exists and is exported.
+*   [x] Ensure `require('path')` is present.
+*   [x] Ensure no other logic resides in `utils.js` beyond these path utilities.
+*   [x] Remove the commented-out `// processSingleFile` export if present.
+*   [x] *Remove* the `require('./excluded-files')` line from `utils.js` (it's not used there).
 
 **File: `main.js` (Cleanup Part 1)**
 
-*   [ ] Remove the definitions of `MAX_DIRECTORY_LOAD_TIME`, `MAX_FILE_SIZE`, `CONCURRENT_DIRS`, `STATUS_UPDATE_INTERVAL`, `DEFAULT_PATTERNS` from `main.js`.
-*   [ ] Add `require('./config.js')` at the top of `main.js` to import necessary constants later. (Actual usage will be added when modules are integrated).
-*   [ ] Verify `require('./utils.js')` exists for path functions needed later.
+*   [x] Remove the definitions of `MAX_DIRECTORY_LOAD_TIME`, `MAX_FILE_SIZE`, `CONCURRENT_DIRS`, `STATUS_UPDATE_INTERVAL`, `DEFAULT_PATTERNS` from `main.js`.
+*   [x] Add `require('./config.js')` at the top of `main.js` to import necessary constants later. (Actual usage will be added when modules are integrated).
+*   [x] Verify `require('./utils.js')` exists for path functions needed later.
 
 ---
 
@@ -51,68 +51,68 @@
 
 **File: `ignore-handler.js`**
 
-*   [ ] Create the file `electron/ignore-handler.js`.
-*   [ ] Add `require('ignore')` at the top and initialize the `ignore` library instance. Log success/failure similar to `main.js`. Handle potential error by creating a fallback `ignore` object.
-*   [ ] Add `require('fs').promises` as `fs`.
-*   [ ] Add `require('path')`.
-*   [ ] Add `require('./utils.js')` for path functions (`normalizePath`, `ensureAbsolutePath`, `safePathJoin`, `safeRelativePath`, `isValidPath`).
-*   [ ] Add `require('./config.js')` to import `DEFAULT_PATTERNS`, `excludedFiles`.
-*   [ ] Define module-level state variable `let currentIgnoreMode = 'automatic';`.
-*   [ ] Define module-level state variable `const ignoreCache = new Map();`.
-*   [ ] Define module-level state variable `const gitIgnoreFound = new Map();`.
-*   [ ] Define module-level state variable `let defaultExcludeFilter = null;`.
-*   [ ] Move the `defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS)` initialization from `main.js` into this module (as a module-level variable, initialized immediately).
-*   [ ] **Function: `shouldExcludeByDefault`**
-    *   [ ] Copy the `shouldExcludeByDefault` function implementation from `main.js` into `ignore-handler.js`.
-    *   [ ] Update dependencies inside the function to use imported `path`, `excludedFiles` (from `config.js`), `ignore` instance, `defaultExcludeFilter`, `ensureAbsolutePath`, `safeRelativePath`, `isValidPath`.
-    *   [ ] Ensure platform-specific checks (`process.platform`) remain.
-    *   [ ] Ensure logging remains (`console.log` / `console.warn`).
-    *   [ ] Export the `shouldExcludeByDefault` function.
-*   [ ] **Function: `collectGitignoreMapRecursive`**
-    *   [ ] Copy the `collectGitignoreMapRecursive` function implementation from `main.js` into `ignore-handler.js`.
-    *   [ ] Update dependencies: `fs`, `path`, `normalizePath`, `ensureAbsolutePath`, `safePathJoin`, `safeRelativePath`.
-    *   [ ] Make this an internal (not exported) helper function.
-*   [ ] **Function: `createGlobalIgnoreFilter`**
-    *   [ ] Copy the `createGlobalIgnoreFilter` function implementation from `main.js` into `ignore-handler.js`.
-    *   [ ] Update dependencies: `ignore`, `DEFAULT_PATTERNS`, `excludedFiles`, `normalizePath`.
-    *   [ ] Adapt logging to include `[IgnoreHandler]` prefix.
-    *   [ ] Make this an internal (not exported) helper function.
-*   [ ] **Function: `createContextualIgnoreFilter`**
-    *   [ ] Copy the `createContextualIgnoreFilter` function implementation from `main.js` into `ignore-handler.js`.
-    *   [ ] Update dependencies: `fs`, `path`, `ignore`, `normalizePath`, `safePathJoin`, `safeRelativePath`.
-    *   [ ] Ensure it uses the module-level `gitIgnoreFound` cache.
-    *   [ ] Adapt logging to include `[IgnoreHandler]` prefix.
-    *   [ ] Make this an internal (not exported) helper function.
-*   [ ] **Function: `loadGitignore` (becomes internal helper for `loadIgnoreFilter`)**
-    *   [ ] Copy the `loadGitignore` function implementation from `main.js` into `ignore-handler.js`.
-    *   [ ] Rename it slightly (e.g., `_loadAutomaticIgnoreFilter`) as it will be called by the main `loadIgnoreFilter` function.
-    *   [ ] Update dependencies: `ignore`, `fs`, `path`, `ensureAbsolutePath`, `normalizePath`, `DEFAULT_PATTERNS`, `excludedFiles`.
-    *   [ ] Adapt it to use the module-level `ignoreCache`, `currentIgnoreMode`, and call the internal `collectGitignoreMapRecursive`.
-    *   [ ] Adapt logging to include `[IgnoreHandler]` prefix.
-    *   [ ] Ensure it returns the `ignore` instance (`ig`).
-    *   [ ] Ensure it populates the `ignoreCache` correctly with the structure `{ ig: <instance>, patterns: <object> }`.
-*   [ ] **Function: `loadIgnoreFilter`** (New public API)
-    *   [ ] Define the exported async function `loadIgnoreFilter(rootDir, customIgnores = [])`.
-    *   [ ] Add JSDoc explaining its purpose, params, and return value (`Promise<import('ignore').Ignore>`).
-    *   [ ] Implement logic:
-        *   `rootDir = ensureAbsolutePath(rootDir);`
-        *   Determine cache key based on `currentIgnoreMode` and `rootDir` (and sorted `customIgnores` if global mode).
-        *   Check `ignoreCache` for the key. If found, log cache hit and return `cached.ig`.
-        *   If cache miss:
-            *   If `currentIgnoreMode === 'global'`, call internal `createGlobalIgnoreFilter(customIgnores)`, store result `{ ig, patterns }` in `ignoreCache`, return `ig`.
-            *   If `currentIgnoreMode === 'automatic'`, call internal `_loadAutomaticIgnoreFilter(rootDir)`, get the result `ig` from the cache entry set by `_loadAutomaticIgnoreFilter`, and return `ig`. (No need for `customIgnores` here).
-        *   Handle errors gracefully, potentially returning a default/empty filter.
-*   [ ] **Function: `shouldIgnorePath` (becomes internal helper for `shouldIgnore`)**
-    *   [ ] Copy the `shouldIgnorePath` function implementation from `main.js` into `ignore-handler.js`.
-    *   [ ] Rename it slightly (e.g. `_checkIgnoreAgainstFilter`).
-    *   [ ] Update dependencies: `path`, `safeRelativePath`, `isValidPath`. Uses the module-level `defaultIgnoreFilter`.
-    *   [ ] Adapt it to accept the *specific* `ignoreFilterInstance` to use (passed as an argument), instead of relying on a potentially ambiguous one. Remove references to `createContextualIgnoreFilter` from within this function check.
-    *   [ ] Remove the `ignoreMode` parameter, as the calling function `shouldIgnore` will handle selecting the right filter instance.
-    *   [ ] Adapt logging (optional, may be too verbose).
-*   [ ] **Function: `shouldIgnore`** (New public API)
-    *   [ ] Define the exported function `shouldIgnore(filePath, rootDir, currentDirContext, ignoreFilterInstance)`. *Important Note:* The `ignoreFilterInstance` passed should be the one *already loaded* for the root context (via `loadIgnoreFilter`). The `currentDirContext` might be needed if fine-grained contextual checks *independent* of the pre-loaded filter instance are required, but the current `shouldIgnorePath` logic mainly relies on the *filter instance* itself containing all patterns. Re-evaluate if `createContextualIgnoreFilter` is truly needed *here* or if its logic is fully incorporated into how `loadIgnoreFilter` builds the instance in automatic mode. *Decision:* Stick to the pattern where `loadIgnoreFilter` builds the comprehensive filter for 'automatic' mode. Simplify `shouldIgnore`.
-    *   [ ] Add JSDoc explaining params and return value (`boolean`).
-    *   [ ] Implement logic:
+*   [x] Create the file `electron/ignore-handler.js`.
+*   [x] Add `require('ignore')` at the top and initialize the `ignore` library instance. Log success/failure similar to `main.js`. Handle potential error by creating a fallback `ignore` object.
+*   [x] Add `require('fs').promises` as `fs`.
+*   [x] Add `require('path')`.
+*   [x] Add `require('./utils.js')` for path functions (`normalizePath`, `ensureAbsolutePath`, `safePathJoin`, `safeRelativePath`, `isValidPath`).
+*   [x] Add `require('./config.js')` to import `DEFAULT_PATTERNS`, `excludedFiles`.
+*   [x] Define module-level state variable `let currentIgnoreMode = 'automatic';`.
+*   [x] Define module-level state variable `const ignoreCache = new Map();`.
+*   [x] Define module-level state variable `const gitIgnoreFound = new Map();`.
+*   [x] Define module-level state variable `let defaultExcludeFilter = null;`.
+*   [x] Move the `defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS)` initialization from `main.js` into this module (as a module-level variable, initialized immediately).
+*   [x] **Function: `shouldExcludeByDefault`**
+    *   [x] Copy the `shouldExcludeByDefault` function implementation from `main.js` into `ignore-handler.js`.
+    *   [x] Update dependencies inside the function to use imported `path`, `excludedFiles` (from `config.js`), `ignore` instance, `defaultExcludeFilter`, `ensureAbsolutePath`, `safeRelativePath`, `isValidPath`.
+    *   [x] Ensure platform-specific checks (`process.platform`) remain.
+    *   [x] Ensure logging remains (`console.log` / `console.warn`).
+    *   [x] Export the `shouldExcludeByDefault` function.
+*   [x] **Function: `collectGitignoreMapRecursive`**
+    *   [x] Copy the `collectGitignoreMapRecursive` function implementation from `main.js` into `ignore-handler.js`.
+    *   [x] Update dependencies: `fs`, `path`, `normalizePath`, `ensureAbsolutePath`, `safePathJoin`, `safeRelativePath`.
+    *   [x] Make this an internal (not exported) helper function.
+*   [x] **Function: `createGlobalIgnoreFilter`**
+    *   [x] Copy the `createGlobalIgnoreFilter` function implementation from `main.js` into `ignore-handler.js`.
+    *   [x] Update dependencies: `ignore`, `DEFAULT_PATTERNS`, `excludedFiles`, `normalizePath`.
+    *   [x] Adapt logging to include `[IgnoreHandler]` prefix.
+    *   [x] Make this an internal (not exported) helper function.
+*   [x] **Function: `createContextualIgnoreFilter`**
+    *   [x] Copy the `createContextualIgnoreFilter` function implementation from `main.js` into `ignore-handler.js`.
+    *   [x] Update dependencies: `fs`, `path`, `ignore`, `normalizePath`, `safePathJoin`, `safeRelativePath`.
+    *   [x] Ensure it uses the module-level `gitIgnoreFound` cache.
+    *   [x] Adapt logging to include `[IgnoreHandler]` prefix.
+    *   [x] Make this an internal (not exported) helper function.
+*   [x] **Function: `loadGitignore` (becomes internal helper for `loadIgnoreFilter`)**
+    *   [x] Copy the `loadGitignore` function implementation from `main.js` into `ignore-handler.js`.
+    *   [x] Rename it slightly (e.g., `_loadAutomaticIgnoreFilter`) as it will be called by the main `loadIgnoreFilter` function.
+    *   [x] Update dependencies: `ignore`, `fs`, `path`, `ensureAbsolutePath`, `normalizePath`, `DEFAULT_PATTERNS`, `excludedFiles`.
+        *   [x] Adapt it to use the module-level `ignoreCache`, `currentIgnoreMode`, and call the internal `collectGitignoreMapRecursive`.
+        *   [x] Adapt logging to include `[IgnoreHandler]` prefix.
+        *   [x] Ensure it returns the `ignore` instance (`ig`).
+        *   [x] Ensure it populates the `ignoreCache` correctly with the structure `{ ig: <instance>, patterns: <object> }`.
+    *   [x] **Function: `loadIgnoreFilter`** (New public API)
+        *   [x] Define the exported async function `loadIgnoreFilter(rootDir, customIgnores = [])`.
+        *   [x] Add JSDoc explaining its purpose, params, and return value (`Promise<import('ignore').Ignore>`).
+        *   [x] Implement logic:
+            *   `rootDir = ensureAbsolutePath(rootDir);`
+            *   Determine cache key based on `currentIgnoreMode` and `rootDir` (and sorted `customIgnores` if global mode).
+            *   Check `ignoreCache` for the key. If found, log cache hit and return `cached.ig`.
+            *   If cache miss:
+                *   If `currentIgnoreMode === 'global'`, call internal `createGlobalIgnoreFilter(customIgnores)`, store result `{ ig, patterns }` in `ignoreCache`, return `ig`.
+                *   If `currentIgnoreMode === 'automatic'`, call internal `_loadAutomaticIgnoreFilter(rootDir)`, get the result `ig` from the cache entry set by `_loadAutomaticIgnoreFilter`, and return `ig`. (No need for `customIgnores` here).
+            *   Handle errors gracefully, potentially returning a default/empty filter.
+*   [x] **Function: `shouldIgnorePath` (becomes internal helper for `shouldIgnore`)**
+    *   [x] Copy the `shouldIgnorePath` function implementation from `main.js` into `ignore-handler.js`.
+    *   [x] Rename it slightly (e.g. `_checkIgnoreAgainstFilter`).
+    *   [x] Update dependencies: `path`, `safeRelativePath`, `isValidPath`. Uses the module-level `defaultIgnoreFilter`.
+    *   [x] Adapt it to accept the *specific* `ignoreFilterInstance` to use (passed as an argument), instead of relying on a potentially ambiguous one. Remove references to `createContextualIgnoreFilter` from within this function check.
+    *   [x] Remove the `ignoreMode` parameter, as the calling function `shouldIgnore` will handle selecting the right filter instance.
+    *   [x] Adapt logging (optional, may be too verbose).
+*   [x] **Function: `shouldIgnore`** (New public API)
+    *   [x] Define the exported function `shouldIgnore(filePath, rootDir, currentDirContext, ignoreFilterInstance)`. *Important Note:* The `ignoreFilterInstance` passed should be the one *already loaded* for the root context (via `loadIgnoreFilter`). The `currentDirContext` might be needed if fine-grained contextual checks *independent* of the pre-loaded filter instance are required, but the current `shouldIgnorePath` logic mainly relies on the *filter instance* itself containing all patterns. Re-evaluate if `createContextualIgnoreFilter` is truly needed *here* or if its logic is fully incorporated into how `loadIgnoreFilter` builds the instance in automatic mode. *Decision:* Stick to the pattern where `loadIgnoreFilter` builds the comprehensive filter for 'automatic' mode. Simplify `shouldIgnore`.
+    *   [x] Add JSDoc explaining params and return value (`boolean`).
+    *   [x] Implement logic:
         *   `filePath = ensureAbsolutePath(filePath);`
         *   `rootDir = ensureAbsolutePath(rootDir);`
         *   Calculate `relativeToRoot = safeRelativePath(rootDir, filePath);`
@@ -121,24 +121,24 @@
         *   If `ignoreFilterInstance.ignores(relativeToRoot)`, return `true`.
         *   *(Remove the contextual check part using `createContextualIgnoreFilter` and `relativeToCurrent` as the main `ignoreFilterInstance` should handle this based on how it was built by `loadIgnoreFilter`)*.
         *   Return `false`.
-*   [ ] **Function: `setIgnoreMode`**
-    *   [ ] Define the exported function `setIgnoreMode(mode)`.
-    *   [ ] Add validation: if `mode` is not 'automatic' or 'global', log warning and return.
-    *   [ ] Update the module-level `currentIgnoreMode = mode;`.
-    *   [ ] Log the mode switch: `console.log(`[IgnoreHandler] Ignore mode switched -> ${mode}`);`.
-    *   [ ] Call `clearCache()` (implement next).
-*   [ ] **Function: `getIgnoreMode`**
-    *   [ ] Define the exported function `getIgnoreMode()`.
-    *   [ ] Return the module-level `currentIgnoreMode`.
-*   [ ] **Function: `clearCache`**
-    *   [ ] Define the exported function `clearCache()`.
-    *   [ ] Clear the module-level `ignoreCache`: `ignoreCache.clear();`.
-    *   [ ] Clear the module-level `gitIgnoreFound`: `gitIgnoreFound.clear();`.
-    *   [ ] Log cache clearing: `console.log('[IgnoreHandler] Ignore cache cleared');`.
-*   [ ] **Function: `getIgnorePatternsForPath`**
-    *   [ ] Define the exported async function `getIgnorePatternsForPath(folderPath, customIgnores = [])`.
-    *   [ ] Add JSDoc.
-    *   [ ] Implement logic almost identical to the *original* `get-ignore-patterns` IPC handler *logic* (but without IPC context):
+*   [x] **Function: `setIgnoreMode`**
+    *   [x] Define the exported function `setIgnoreMode(mode)`.
+    *   [x] Add validation: if `mode` is not 'automatic' or 'global', log warning and return.
+    *   [x] Update the module-level `currentIgnoreMode = mode;`.
+    *   [x] Log the mode switch: `console.log(`[IgnoreHandler] Ignore mode switched -> ${mode}`);`.
+    *   [x] Call `clearCache()` (implement next).
+*   [x] **Function: `getIgnoreMode`**
+    *   [x] Define the exported function `getIgnoreMode()`.
+    *   [x] Return the module-level `currentIgnoreMode`.
+*   [x] **Function: `clearCache`**
+    *   [x] Define the exported function `clearCache()`.
+    *   [x] Clear the module-level `ignoreCache`: `ignoreCache.clear();`.
+    *   [x] Clear the module-level `gitIgnoreFound`: `gitIgnoreFound.clear();`.
+    *   [x] Log cache clearing: `console.log('[IgnoreHandler] Ignore cache cleared');`.
+*   [x] **Function: `getIgnorePatternsForPath`**
+    *   [x] Define the exported async function `getIgnorePatternsForPath(folderPath, customIgnores = [])`.
+    *   [x] Add JSDoc.
+    *   [x] Implement logic almost identical to the *original* `get-ignore-patterns` IPC handler *logic* (but without IPC context):
         *   Ensure `folderPath` is absolute.
         *   Determine cache key based on `folderPath`, `currentIgnoreMode`, and `customIgnores`.
         *   Try to retrieve patterns from `ignoreCache`. If found, return `{ patterns: cached.patterns }`.
@@ -149,28 +149,28 @@
                 *   Retrieve the newly cached entry: `const cached = ignoreCache.get(cacheKey);`
                 *   Return `{ patterns: cached?.patterns || { gitignoreMap: {} } }`.
         *   Handle errors and return `{ error: err.message }`.
-*   [ ] **Function: `getDefaultIgnoreFilter`**
-    *   [ ] Define exported function `getDefaultIgnoreFilter()`.
-    *   [ ] Return the module-level `defaultIgnoreFilter` instance.
-*   [ ] Export all public functions: `loadIgnoreFilter`, `shouldIgnore`, `setIgnoreMode`, `getIgnoreMode`, `clearCache`, `getIgnorePatternsForPath`, `shouldExcludeByDefault`, `getDefaultIgnoreFilter`.
+*   [x] **Function: `getDefaultIgnoreFilter`**
+    *   [x] Define exported function `getDefaultIgnoreFilter()`.
+    *   [x] Return the module-level `defaultIgnoreFilter` instance.
+*   [x] Export all public functions: `loadIgnoreFilter`, `shouldIgnore`, `setIgnoreMode`, `getIgnoreMode`, `clearCache`, `getIgnorePatternsForPath`, `shouldExcludeByDefault`, `getDefaultIgnoreFilter`.
 
 **File: `main.js` (Cleanup Part 2)**
 
-*   [ ] Remove the `ignore = require('ignore')` block.
-*   [ ] Remove the `currentIgnoreMode` global variable.
-*   [ ] Remove the `ignoreCache` global variable.
-*   [ ] Remove the `gitIgnoreFound` global variable.
-*   [ ] Remove the `defaultExcludeFilter` global variable.
-*   [ ] Remove the `defaultIgnoreFilter` global variable initialization.
-*   [ ] Remove the `shouldExcludeByDefault` function.
-*   [ ] Remove the `collectGitignoreMapRecursive` function.
-*   [ ] Remove the `createGlobalIgnoreFilter` function.
-*   [ ] Remove the `createContextualIgnoreFilter` function.
-*   [ ] Remove the `loadGitignore` function.
-*   [ ] Remove the `shouldIgnorePath` function.
-*   [ ] Remove the `ipcMain.on('clear-ignore-cache')` handler. (Will be replaced in `ipc-manager.js`).
-*   [ ] Remove the `ipcMain.handle('get-ignore-patterns')` handler. (Will be replaced in `ipc-manager.js`).
-*   [ ] Remove the `ipcMain.on('set-ignore-mode')` handler. (Will be replaced in `ipc-manager.js`).
+*   [x] Remove the `ignore = require('ignore')` block.
+*   [x] Remove the `currentIgnoreMode` global variable.
+*   [x] Remove the `ignoreCache` global variable.
+*   [x] Remove the `gitIgnoreFound` global variable.
+*   [x] Remove the `defaultExcludeFilter` global variable.
+*   [x] Remove the `defaultIgnoreFilter` global variable initialization.
+*   [x] Remove the `shouldExcludeByDefault` function.
+*   [x] Remove the `collectGitignoreMapRecursive` function.
+*   [x] Remove the `createGlobalIgnoreFilter` function.
+*   [x] Remove the `createContextualIgnoreFilter` function.
+*   [x] Remove the `loadGitignore` function.
+*   [x] Remove the `shouldIgnorePath` function.
+*   [x] Remove the `ipcMain.on('clear-ignore-cache')` handler. (Will be replaced in `ipc-manager.js`).
+*   [x] Remove the `ipcMain.handle('get-ignore-patterns')` handler. (Will be replaced in `ipc-manager.js`).
+*   [x] Remove the `ipcMain.on('set-ignore-mode')` handler. (Will be replaced in `ipc-manager.js`).
 
 ---
 

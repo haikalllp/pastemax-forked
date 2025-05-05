@@ -22,9 +22,6 @@ const {
 // ======================
 // GLOBAL STATE
 // ======================
-/** runtime ignore-mode */
-/** @type {'automatic' | 'global'} */
-let currentIgnoreMode = 'automatic';
 let isLoadingDirectory = false;
 let loadingTimeoutId = null;
 
@@ -36,10 +33,8 @@ let loadingTimeoutId = null;
 let currentProgress = { directories: 0, files: 0 };
 
 // Global caches
-const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized root directory
 const fileCache = new Map(); // Cache for file metadata keyed by normalized file path
 const fileTypeCache = new Map(); // Cache for binary file type detection results
-const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
 
 // Throttling for status updates
 let lastStatusUpdateTime = 0;
@@ -47,19 +42,6 @@ let lastStatusUpdateTime = 0;
 // ======================
 // MODULE INITIALIZATION
 // ======================
-let ignore;
-try {
-  ignore = require('ignore');
-  console.log('Successfully loaded ignore module');
-} catch (err) {
-  console.error('Failed to load ignore module:', err);
-  // Simple fallback implementation
-  ignore = {
-    createFilter: () => (path) => !excludedFiles.includes(path),
-  };
-  console.log('Using fallback for ignore module');
-}
-
 let tiktoken;
 try {
   tiktoken = require('tiktoken');
@@ -93,350 +75,6 @@ const {
   safeRelativePath,
   isValidPath
 } = require('./utils.js');
-
-// Cache for default exclude ignore filter
-let defaultExcludeFilter = null;
-
-function shouldExcludeByDefault(filePath, rootDir) {
-  filePath = ensureAbsolutePath(filePath);
-  rootDir = ensureAbsolutePath(rootDir);
-
-  const relativePath = safeRelativePath(rootDir, filePath);
-
-  if (!isValidPath(relativePath) || relativePath.startsWith('..')) {
-    return true;
-  }
-
-  if (process.platform === 'win32') {
-    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(path.basename(filePath))) {
-      console.log(`Excluding reserved Windows name: ${path.basename(filePath)}`);
-      return true;
-    }
-
-    if (
-      filePath.toLowerCase().includes('\\windows\\') ||
-      filePath.toLowerCase().includes('\\system32\\')
-    ) {
-      console.log(`Excluding system path: ${filePath}`);
-      return true;
-    }
-  }
-
-  if (process.platform === 'darwin') {
-    if (
-      filePath.includes('/.Spotlight-') ||
-      filePath.includes('/.Trashes') ||
-      filePath.includes('/.fseventsd')
-    ) {
-      console.log(`Excluding macOS system path: ${filePath}`);
-      return true;
-    }
-  }
-
-  if (process.platform === 'linux') {
-    if (
-      filePath.startsWith('/proc/') ||
-      filePath.startsWith('/sys/') ||
-      filePath.startsWith('/dev/')
-    ) {
-      console.log(`Excluding Linux system path: ${filePath}`);
-      return true;
-    }
-  }
-
-  // Create the filter only once and reuse it
-  if (!defaultExcludeFilter) {
-    defaultExcludeFilter = ignore().add(excludedFiles);
-    console.log(`[Default Exclude] Initialized filter with ${excludedFiles.length} excluded files`);
-  }
-
-  const isExcluded = defaultExcludeFilter.ignores(relativePath);
-
-  // Only log exclusions periodically to reduce spam
-  if (isExcluded && Math.random() < 0.05) {
-    // Log ~5% of exclusions as samples
-    console.log(`[Default Exclude] Excluded file: ${relativePath}`);
-  }
-
-  return isExcluded;
-}
-
-// ======================
-// IGNORE CACHE LOGIC
-// ======================
-async function collectGitignoreMapRecursive(startDir, rootDir, currentMap = new Map()) {
-  const normalizedStartDir = normalizePath(startDir);
-  const normalizedRootDir = normalizePath(rootDir);
-
-  try {
-    await fs.promises.access(normalizedStartDir, fs.constants.R_OK);
-  } catch (err) {
-    console.warn(`Cannot access directory: ${normalizedStartDir}`, err);
-    return currentMap;
-  }
-
-  // Read .gitignore in current directory
-  const gitignorePath = safePathJoin(normalizedStartDir, '.gitignore');
-  try {
-    const content = await fs.promises.readFile(gitignorePath, 'utf8');
-    const patterns = content
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'));
-
-    if (patterns.length > 0) {
-      const relativeDirPath = safeRelativePath(normalizedRootDir, normalizedStartDir) || '.';
-      currentMap.set(relativeDirPath, patterns);
-      console.log(`Found .gitignore in ${relativeDirPath} with ${patterns.length} patterns`);
-    }
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error(`Error reading ${gitignorePath}:`, err);
-    }
-  }
-
-  // Recursively scan subdirectories in parallel
-  try {
-    const dirents = await fs.promises.readdir(normalizedStartDir, { withFileTypes: true });
-    const subdirs = dirents.filter((dirent) => dirent.isDirectory());
-
-    // Process subdirectories in parallel
-    await Promise.all(
-      subdirs.map(async (dirent) => {
-        const subDir = safePathJoin(normalizedStartDir, dirent.name);
-        await collectGitignoreMapRecursive(subDir, normalizedRootDir, currentMap);
-      })
-    );
-  } catch (err) {
-    console.error(`Error reading directory ${normalizedStartDir} for recursion:`, err);
-  }
-
-  return currentMap;
-}
-
-// Pre-compiled default ignore filter for early checks
-const defaultIgnoreFilter = ignore().add(DEFAULT_PATTERNS);
-
-function shouldIgnorePath(filePath, rootDir, currentDir, ignoreFilter, ignoreMode = 'automatic') {
-  // Validate paths to prevent empty path errors
-  if (!filePath || filePath.trim() === '') {
-    console.warn('Ignoring empty path in shouldIgnorePath');
-    return true; // Treat empty paths as "should ignore"
-  }
-
-  const relativeToRoot = safeRelativePath(rootDir, filePath);
-  const relativeToCurrent = safeRelativePath(currentDir, filePath);
-
-  // Validate that the relative paths are not empty
-  if (!relativeToRoot || relativeToRoot.trim() === '') {
-    console.warn(`Skipping empty relativeToRoot path for: ${filePath}`);
-    return true;
-  }
-
-  // First check against default patterns (fast path)
-  if (defaultIgnoreFilter.ignores(relativeToRoot)) {
-    console.log('Skipped by default ignore patterns:', relativeToRoot);
-    return true;
-  }
-
-  // Then check against root-relative patterns (global/default)
-  if (ignoreFilter.ignores(relativeToRoot)) {
-    return true;
-  }
-
-  // In global mode, we don't need contextual checks
-  if (ignoreMode === 'global') {
-    return false;
-  }
-
-  // Then check against current directory context (automatic mode only)
-  const currentIgnoreFilter = createContextualIgnoreFilter(rootDir, currentDir, ignoreFilter);
-
-  // Ensure relativeToCurrent is not empty before calling ignores
-  if (!relativeToCurrent || relativeToCurrent.trim() === '') {
-    console.warn(`Skipping empty relativeToCurrent path for: ${filePath}`);
-    return false; // Don't ignore if we can't determine the relative path
-  }
-
-  return currentIgnoreFilter.ignores(relativeToCurrent);
-}
-
-function createGlobalIgnoreFilter(customIgnores = []) {
-  const normalizedCustomIgnores = (customIgnores || []).map((p) => p.trim()).sort();
-  const ig = ignore();
-  const globalPatterns = [...DEFAULT_PATTERNS, ...excludedFiles, ...normalizedCustomIgnores].map(
-    (pattern) => normalizePath(pattern)
-  );
-  ig.add(globalPatterns);
-  console.log(
-    `[Global Mode] Added ${DEFAULT_PATTERNS.length} default patterns, ${excludedFiles.length} excluded files, and ${normalizedCustomIgnores.length} custom ignores`
-  );
-
-  console.log(
-    `[Global Mode] Added ${globalPatterns.length} global patterns (${excludedFiles.length} excluded + ${normalizedCustomIgnores.length} custom)`
-  );
-  console.log(`[Global Mode] Custom ignores added:`, normalizedCustomIgnores);
-
-  return ig;
-}
-
-function createContextualIgnoreFilter(
-  rootDir,
-  currentDir,
-  parentIgnoreFilter,
-  ignoreMode = 'automatic'
-) {
-  const ig = ignore();
-
-  // 1. Add all patterns from parent filter (global/default patterns)
-  if (parentIgnoreFilter && parentIgnoreFilter.rules) {
-    const parentRules = parentIgnoreFilter.rules;
-    // Extract pattern strings from parent rules
-    const parentPatterns = Object.values(parentRules).map((rule) => rule.pattern);
-    // Filter out any undefined/empty patterns
-    const validPatterns = parentPatterns.filter((p) => p && typeof p === 'string');
-    ig.add(validPatterns);
-  }
-
-  // 2. Only add patterns from .gitignore if in automatic mode
-  if (ignoreMode === 'automatic') {
-    const gitignorePath = safePathJoin(currentDir, '.gitignore');
-
-    // Create a cache key for this .gitignore file
-    const cacheKey = normalizePath(gitignorePath);
-
-    let patterns = [];
-    let needToProcessFile = true;
-
-    // Check if we've already processed this .gitignore file
-    if (gitIgnoreFound.has(cacheKey)) {
-      patterns = gitIgnoreFound.get(cacheKey);
-      needToProcessFile = false;
-    }
-
-    if (needToProcessFile) {
-      try {
-        const content = fs.readFileSync(gitignorePath, 'utf8');
-        patterns = content
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line && !line.startsWith('#'));
-
-        // Cache the patterns for future use
-        if (patterns.length > 0) {
-          gitIgnoreFound.set(cacheKey, patterns);
-
-          // Get a more concise path for display
-          const relativePath = safeRelativePath(rootDir, currentDir);
-          console.log(
-            `[Contextual Filter] Added ${patterns.length} patterns from ${relativePath === '.' ? 'root' : relativePath} .gitignore`
-          );
-        }
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          console.error(`Error reading ${gitignorePath}:`, err);
-        }
-      }
-    }
-
-    if (patterns.length > 0) {
-      // Adjust patterns to be relative to current directory
-      const adjustedPatterns = patterns.map((pattern) => {
-        if (pattern.startsWith('/')) {
-          return pattern.substring(1); // Make root-relative
-        }
-        if (!pattern.includes('**')) {
-          // Make relative to current directory
-          const relPath = safeRelativePath(rootDir, currentDir);
-          return safePathJoin(relPath, pattern);
-        }
-        return pattern;
-      });
-
-      ig.add(adjustedPatterns);
-    }
-  }
-
-  return ig;
-}
-
-async function loadGitignore(rootDir, window) {
-  rootDir = ensureAbsolutePath(rootDir);
-  const cacheKey = `${rootDir}:automatic`;
-
-  if (ignoreCache.has(cacheKey)) {
-    console.log(`Using cached ignore filter for automatic mode in:`, rootDir);
-    const cached = ignoreCache.get(cacheKey);
-    console.log('Cache entry details:', {
-      patternCount: Object.keys(cached.patterns.gitignoreMap || {}).length,
-    });
-    return cached.ig;
-  }
-  console.log(`Cache miss for key: ${cacheKey}`);
-
-  const ig = ignore();
-
-  try {
-    // Combine default patterns with excludedFiles
-    const defaultPatterns = [...DEFAULT_PATTERNS, ...excludedFiles];
-
-    ig.add(defaultPatterns);
-    console.log(
-      `[Automatic Mode] Added ${DEFAULT_PATTERNS.length} default patterns and ${excludedFiles.length} excluded files`
-    );
-
-    const gitignoreMap = await collectGitignoreMapRecursive(rootDir, rootDir);
-    let totalGitignorePatterns = 0;
-
-    // Store raw patterns with their origin directory
-    const patternOrigins = new Map();
-    for (const [relativeDirPath, patterns] of gitignoreMap) {
-      patternOrigins.set(relativeDirPath, patterns);
-
-      // Add patterns to root filter (for backward compatibility)
-      const patternsToAdd = patterns.map((pattern) => {
-        if (!pattern.startsWith('/') && !pattern.includes('**')) {
-          const joinedPath = normalizePath(
-            path.join(relativeDirPath === '.' ? '' : relativeDirPath, pattern)
-          );
-          return joinedPath.replace(/^\.\//, '');
-        } else if (pattern.startsWith('/')) {
-          return pattern.substring(1);
-        }
-        return pattern;
-      });
-
-      if (patternsToAdd.length > 0) {
-        ig.add(patternsToAdd);
-        totalGitignorePatterns += patternsToAdd.length;
-        console.log(
-          `[Automatic Mode] Added ${patternsToAdd.length} repository patterns from ${relativeDirPath}/.gitignore`
-        );
-      }
-    }
-
-    if (totalGitignorePatterns > 0) {
-      console.log(
-        `[Automatic Mode] Added ${totalGitignorePatterns} repository-specific patterns (combined with ${defaultPatterns.length} default patterns) for:`,
-        rootDir
-      );
-    }
-
-    ignoreCache.set(cacheKey, {
-      ig,
-      patterns: {
-        gitignoreMap: Object.fromEntries(gitignoreMap),
-        patternOrigins: Object.fromEntries(patternOrigins),
-      },
-    });
-
-
-    return ig;
-  } catch (err) {
-    console.error(`Error in loadGitignore for ${rootDir}:`, err);
-    return ig;
-  }
-}
 
 // ======================
 // FILE PROCESSING
@@ -492,8 +130,7 @@ async function processSingleFile(fullPath, rootDir, ignoreFilter) {
       isBinary: false,
       isSkipped: false,
       content: '',
-      tokenCount: 0,
-      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir),
+      tokenCount: 0
     };
 
     if (stats.size > MAX_FILE_SIZE) {
@@ -525,8 +162,7 @@ async function processSingleFile(fullPath, rootDir, ignoreFilter) {
       isSkipped: true,
       error: `Error: ${err.message}`,
       content: '',
-      tokenCount: 0,
-      excludedByDefault: shouldExcludeByDefault(fullPath, rootDir),
+      tokenCount: 0
     };
   }
 }
@@ -547,11 +183,6 @@ async function processDirectory({
   const fullPath = safePathJoin(dir, dirent.name);
   const relativePath = safeRelativePath(rootDir, fullPath);
 
-  // Early check against default ignore patterns
-  if (defaultIgnoreFilter.ignores(relativePath)) {
-    console.log('Skipped by default ignore patterns:', relativePath);
-    return { results: [], progress };
-  }
 
   if (
     fullPath.includes('.app') ||
@@ -563,15 +194,9 @@ async function processDirectory({
     return { results: [], progress };
   }
 
-  // In global mode, use the passed ignoreFilter directly
-  const filterToUse =
-    ignoreMode === 'global'
-      ? ignoreFilter
-      : createContextualIgnoreFilter(rootDir, currentDir, ignoreFilter, ignoreMode);
-
-  if (!shouldIgnorePath(fullPath, rootDir, currentDir, filterToUse, ignoreMode)) {
+  if (!ignoreFilter.ignores(relativePath)) {
     progress.directories++;
-    await watcher.initializeWatcher(dir, window, ignoreFilter, defaultIgnoreFilter);
+    await watcher.initializeWatcher(dir, window, ignoreFilter);
     window.webContents.send('file-processing-status', {
       status: 'processing',
       message: `Scanning directories (${progress.directories} processed)... (Press ESC to cancel)`,
@@ -579,7 +204,7 @@ async function processDirectory({
     return readFilesRecursively(
       fullPath,
       rootDir,
-      filterToUse,
+      ignoreFilter,
       window,
       progress,
       fullPath,
@@ -692,13 +317,7 @@ async function readFilesRecursively(
             return;
           }
 
-          // Early check against default ignore patterns
-          if (defaultIgnoreFilter.ignores(relativePath)) {
-            console.log('Skipped by default ignore patterns:', relativePath);
-            return;
-          }
-
-          if (shouldIgnorePath(fullPath, rootDir, currentDir, ignoreFilter, ignoreMode)) {
+          if (ignoreFilter.ignores(relativePath)) {
             // console.log('Ignored by filter, skipping:', relativePath); // Can be noisy
             return;
           }
@@ -915,17 +534,11 @@ async function cancelDirectoryLoading(window, reason = 'user') {
 // ======================
 ipcMain.on('clear-main-cache', () => {
   console.log('Clearing main process caches');
-  ignoreCache.clear();
   fileCache.clear();
   fileTypeCache.clear();
   console.log('Main process caches cleared (including ignoreCache)');
 });
 
-ipcMain.on('clear-ignore-cache', () => {
-  console.log('Clearing ignore cache due to ignore settings change');
-  ignoreCache.clear();
-  console.log('Ignore cache cleared');
-});
 
 ipcMain.on('open-folder', async (event) => {
   const result = await dialog.showOpenDialog({
@@ -945,44 +558,6 @@ ipcMain.on('open-folder', async (event) => {
   }
 });
 
-if (!ipcMain.eventNames().includes('get-ignore-patterns')) {
-  ipcMain.handle(
-    'get-ignore-patterns',
-    async (event, { folderPath, mode = 'automatic', customIgnores = [] } = {}) => {
-      if (!folderPath) {
-        console.log('get-ignore-patterns called without folderPath - returning default patterns');
-        return {
-          patterns: {
-            global: [...DEFAULT_PATTERNS, ...excludedFiles, ...(customIgnores || [])],
-          },
-        };
-      }
-
-      try {
-        let patterns;
-        const normalizedPath = ensureAbsolutePath(folderPath);
-
-        if (mode === 'global') {
-          patterns = { global: [...excludedFiles, ...(customIgnores || [])] };
-          const cacheKey = `${normalizedPath}:global:${JSON.stringify(customIgnores?.sort() || [])}`;
-          ignoreCache.set(cacheKey, {
-            ig: createGlobalIgnoreFilter(customIgnores),
-            patterns,
-          });
-        } else {
-          await loadGitignore(normalizedPath);
-          const cacheKey = `${normalizedPath}:automatic`;
-          patterns = ignoreCache.get(cacheKey)?.patterns || { gitignoreMap: {} };
-        }
-
-        return { patterns };
-      } catch (err) {
-        console.error(`Error getting ignore patterns for ${folderPath}:`, err);
-        return { error: err.message };
-      }
-    }
-  );
-}
 
 ipcMain.on('cancel-directory-loading', (event) => {
   cancelDirectoryLoading(BrowserWindow.fromWebContents(event.sender));
@@ -991,36 +566,6 @@ ipcMain.on('cancel-directory-loading', (event) => {
 ipcMain.on('debug-file-selection', (event, data) => {
   console.log('DEBUG - File Selection:', data);
 });
-
-if (!ipcMain.eventNames().includes('set-ignore-mode')) {
-  /**
-   * Handles ignore mode changes. Validates the mode, clears caches,
-   * resets the watcher, and notifies renderer windows of the change.
-   * @param {string} mode - The new ignore mode ('automatic' or 'global')
-   */
-  ipcMain.on('set-ignore-mode', async (_event, mode) => {
-    if (mode !== 'automatic' && mode !== 'global') {
-      console.warn(`[IgnoreMode] Received invalid mode: ${mode}`);
-      return;
-    }
-
-    currentIgnoreMode = mode;
-    console.log(`[IgnoreMode] switched -> ${mode}`);
-    console.log('[IgnoreMode] DEBUG - Current mode set to:', currentIgnoreMode);
-
-    ignoreCache.clear();
-    fileCache.clear();
-    fileTypeCache.clear();
-
-    // Watcher cleanup is now handled by the watcher module itself
-
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (win && win.webContents) {
-        win.webContents.send('ignore-mode-updated', mode);
-      }
-    });
-  });
-}
 
 ipcMain.on('request-file-list', async (event, folderPath) => {
   console.log('Received request-file-list payload:', folderPath); // Log the entire payload
@@ -1048,31 +593,9 @@ ipcMain.on('request-file-list', async (event, folderPath) => {
 
     currentProgress = { directories: 0, files: 0 };
 
-    // Clear ignore cache if ignore settings were modified
-    if (folderPath.ignoreSettingsModified) {
-      console.log('Clearing ignore cache due to modified ignore settings');
-      ignoreCache.clear();
-    }
 
-    console.log(
-      `Loading ignore patterns for: ${folderPath.folderPath} in mode: ${folderPath.ignoreMode}`
-    );
-    let ignoreFilter;
-    if (folderPath.ignoreMode === 'global') {
-      console.log('Using global ignore filter with custom ignores:', folderPath.customIgnores);
-      ignoreFilter = createGlobalIgnoreFilter(folderPath.customIgnores);
-    } else {
-      // Default to automatic
-      console.log('Using automatic ignore filter (loading .gitignore)');
-      ignoreFilter = await loadGitignore(
-        folderPath.folderPath,
-        BrowserWindow.fromWebContents(event.sender)
-      );
-    }
-    if (!ignoreFilter) {
-      throw new Error('Failed to load ignore patterns');
-    }
-    console.log('Ignore patterns loaded successfully');
+    const ignoreFilter = require('ignore')().add([...DEFAULT_PATTERNS, ...excludedFiles]);
+    console.log('Using default ignore patterns');
 
     const { results: files } = await readFilesRecursively(
       folderPath.folderPath,
@@ -1081,7 +604,7 @@ ipcMain.on('request-file-list', async (event, folderPath) => {
       BrowserWindow.fromWebContents(event.sender),
       currentProgress,
       folderPath.folderPath,
-      folderPath?.ignoreMode ?? currentIgnoreMode
+      'automatic'
     );
 
     if (!isLoadingDirectory) {
@@ -1115,7 +638,7 @@ ipcMain.on('request-file-list', async (event, folderPath) => {
           size: file.size,
           isDirectory: file.isDirectory,
           extension: path.extname(file.name).toLowerCase(),
-          excluded: shouldExcludeByDefault(file.path, folderPath.folderPath),
+          excluded: false,
           content: file.content,
           tokenCount: file.tokenCount,
           isBinary: file.isBinary,
