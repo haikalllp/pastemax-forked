@@ -1,6 +1,4 @@
 const path = require('path');
-const fs = require('fs').promises;
-const { excludedFiles, binaryExtensions } = require('./excluded-files');
 
 // ======================
 // PATH UTILITIES
@@ -54,7 +52,6 @@ module.exports = {
   normalizePath,
   ensureAbsolutePath,
   safeRelativePath,
-  // processSingleFile,
   safePathJoin,
   isValidPath
 };

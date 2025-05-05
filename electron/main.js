@@ -8,49 +8,16 @@ const os = require('os');
 const { default: PQueue } = require('p-queue'); // Added for controlled concurrency
 const watcher = require('./watcher.js'); // New watcher module
 
-// Configuration constants
-const MAX_DIRECTORY_LOAD_TIME = 300000; // 5 minutes timeout for large repositories
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB max file size
-const CONCURRENT_DIRS = os.cpus().length * 2; // Increase based on CPU count for better parallelism
-// const CHUNK_SIZE = 30; // Number of files to process in one chunk (no longer used, might bring back)
-
-// Default ignore patterns that should always be applied
-const DEFAULT_PATTERNS = [
-  '.git',
-  '.svn',
-  '.hg',
-  'node_modules',
-  'bower_components',
-  'vendor',
-  'dist',
-  'build',
-  'out',
-  '.next',
-  'target',
-  'bin',
-  'Debug',
-  'Release',
-  'x64',
-  'x86',
-  '.output',
-  '*.min.js',
-  '*.min.css',
-  '*.bundle.js',
-  '*.compiled.*',
-  '*.generated.*',
-  '.cache',
-  '.parcel-cache',
-  '.webpack',
-  '.turbo',
-  '.idea',
-  '.vscode',
-  '.vs',
-  '.DS_Store',
-  'Thumbs.db',
-  'desktop.ini',
-  '*.asar',
-  'release-builds',
-];
+// Load Configurations Constants from config.js
+const {
+  MAX_DIRECTORY_LOAD_TIME,
+  MAX_FILE_SIZE,
+  CONCURRENT_DIRS,
+  STATUS_UPDATE_INTERVAL,
+  DEFAULT_PATTERNS,
+  excludedFiles,
+  binaryExtensions
+} = require('./config.js');
 
 // ======================
 // GLOBAL STATE
@@ -68,15 +35,14 @@ let loadingTimeoutId = null;
  */
 let currentProgress = { directories: 0, files: 0 };
 
-// Throttling for status updates
-let lastStatusUpdateTime = 0;
-const STATUS_UPDATE_INTERVAL = 200; // ms
-
 // Global caches
 const ignoreCache = new Map(); // Cache for ignore filters keyed by normalized root directory
 const fileCache = new Map(); // Cache for file metadata keyed by normalized file path
 const fileTypeCache = new Map(); // Cache for binary file type detection results
 const gitIgnoreFound = new Map(); // Cache for already found/processed gitignore files
+
+// Throttling for status updates
+let lastStatusUpdateTime = 0;
 
 // ======================
 // MODULE INITIALIZATION
@@ -102,9 +68,6 @@ try {
   console.error('Failed to load tiktoken module:', err);
   tiktoken = null;
 }
-
-// Import the excluded files list
-const { excludedFiles, binaryExtensions } = require('./excluded-files');
 
 let encoder;
 try {
