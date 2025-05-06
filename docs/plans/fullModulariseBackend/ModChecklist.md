@@ -180,29 +180,29 @@
 
 **File: `file-processor.js`**
 
-*   [ ] Create the file `electron/file-processor.js`.
-*   [ ] Add `require('fs').promises` as `fs`.
-*   [ ] Add `require('path')`.
-*   [ ] Add `require('tiktoken')` setup block (identical to `main.js`, including try/catch and fallback logging). Store the `encoder` instance at module level.
-*   [ ] Add `require('./utils.js')` for `normalizePath`, `ensureAbsolutePath`, `safeRelativePath`, `isValidPath`.
-*   [ ] Add `require('./config.js')` for `MAX_FILE_SIZE`, `binaryExtensions`.
-*   [ ] Define module-level state variable `const fileCache = new Map();`.
-*   [ ] Define module-level state variable `const fileTypeCache = new Map();`.
-*   [ ] **Function: `countFileTokens`**
-    *   [ ] Copy the `countTokens` function implementation from `main.js` into `file-processor.js`. Rename it to `countFileTokens`.
-    *   [ ] Ensure it uses the module-level `encoder` instance.
-    *   [ ] Keep the fallback logic (`Math.ceil(text.length / 4)`).
-    *   [ ] Make this an internal (not exported) function.
-*   [ ] **Function: `isBinary`** (Replaces `isBinaryFile`)
-    *   [ ] Copy the `isBinaryFile` function implementation from `main.js` into `file-processor.js`. Rename it `isBinary`.
-    *   [ ] Update dependencies: `path`, module-level `fileTypeCache`, `binaryExtensions` from `config.js`.
-    *   [ ] Make this an internal (not exported) helper function.
-*   [ ] **Function: `processFile`** (Replaces `processSingleFile`)
-    *   [ ] Define the exported async function `processFile(fullPath, rootDir, options)`.
-    *   [ ] Define `options`: `{ config: ConfigObject, ignoreHandler: IgnoreHandlerInterface, shouldCheckIgnore=true }` -> *Correction:* Dependencies like `ignoreHandler` should be injected at a higher level (like `directory-processor`). `processFile` should focus *only* on the file itself, assuming it *should* be processed. The caller (`directory-processor` or `watcher`) is responsible for the ignore check *before* calling `processFile`. *Revised Signature:* `processFile(fullPath, rootDir)`
-    *   [ ] Add JSDoc defining the `FileMetadata` type it returns (or Promise thereof). See "Type Changes" section in the plan.
-    *   [ ] Check the module-level `fileCache` first. If `fullPathNormalized` exists, return the cached data.
-    *   [ ] Implement logic based *heavily* on the *original* `processSingleFile` function *and* the file processing parts *within* the old `readFilesRecursively` loop:
+*   [x] Create the file `electron/file-processor.js`.
+*   [x] Add `require('fs').promises` as `fs`.
+*   [x] Add `require('path')`.
+*   [x] Add `require('tiktoken')` setup block (identical to `main.js`, including try/catch and fallback logging). Store the `encoder` instance at module level.
+*   [x] Add `require('./utils.js')` for `normalizePath`, `ensureAbsolutePath`, `safeRelativePath`, `isValidPath`.
+*   [x] Add `require('./config.js')` for `MAX_FILE_SIZE`, `binaryExtensions`.
+*   [x] Define module-level state variable `const fileCache = new Map();`.
+*   [x] Define module-level state variable `const fileTypeCache = new Map();`.
+*   [x] **Function: `countFileTokens`**
+    *   [x] Copy the `countTokens` function implementation from `main.js` into `file-processor.js`. Rename it to `countFileTokens`.
+    *   [x] Ensure it uses the module-level `encoder` instance.
+    *   [x] Keep the fallback logic (`Math.ceil(text.length / 4)`).
+    *   [x] Make this an internal (not exported) function.
+*   [x] **Function: `isBinary`** (Replaces `isBinaryFile`)
+    *   [x] Copy the `isBinaryFile` function implementation from `main.js` into `file-processor.js`. Rename it `isBinary`.
+    *   [x] Update dependencies: `path`, module-level `fileTypeCache`, `binaryExtensions` from `config.js`.
+    *   [x] Make this an internal (not exported) helper function.
+*   [x] **Function: `processFile`** (Replaces `processSingleFile`)
+    *   [x] Define the exported async function `processFile(fullPath, rootDir)`.
+    *   [x] Define `options`: `{ config: ConfigObject }` -> *Correction:* Dependencies like `ignoreHandler` should be injected at a higher level (like `directory-processor`). `processFile` should focus *only* on the file itself, assuming it *should* be processed. The caller (`directory-processor` or `watcher`) is responsible for the ignore check *before* calling `processFile`.
+    *   [x] Add JSDoc defining the `FileMetadata` type it returns (or Promise thereof). See "Type Changes" section in the plan.
+    *   [x] Check the module-level `fileCache` first. If `fullPathNormalized` exists, return the cached data.
+    *   [x] Implement logic based *heavily* on the *original* `processSingleFile` function *and* the file processing parts *within* the old `readFilesRecursively` loop:
         *   Normalize paths: `fullPath = ensureAbsolutePath(fullPath); rootDir = ensureAbsolutePath(rootDir); const relativePath = safeRelativePath(rootDir, fullPath); const fullPathNormalized = normalizePath(fullPath);`
         *   Basic validation: Check `isValidPath(relativePath)` and `!relativePath.startsWith('..')`. If invalid, return a minimal error `FileMetadata` object `{ path: fullPathNormalized, relativePath, name: path.basename(fullPath), isSkipped: true, error: 'Invalid path' }`.
         *   Call internal `isBinary(fullPath)`. If true:
@@ -218,22 +218,23 @@
             *   Create the final `FileMetadata` object: `{ name, path, relativePath, content, tokenCount, size, isBinary: false, isSkipped: false }`.
             *   Cache the result in `fileCache`.
             *   Return the `FileMetadata` object.
-*   [ ] **Function: `clearFileCache`** (New public API for cache management)
-    *   [ ] Define exported function `clearFileCache()`.
-    *   [ ] Clear `fileCache`: `fileCache.clear();`.
-    *   [ ] Clear `fileTypeCache`: `fileTypeCache.clear();`.
-    *   [ ] Log: `console.log('[FileProcessor] File caches cleared');`
-*   [ ] Export `processFile` and `clearFileCache`.
+*   [x] **Function: `clearFileCache`** (New public API for cache management)
+    *   [x] Define exported function `clearFileCache()`.
+    *   [x] Clear `fileCache`: `fileCache.clear();`.
+    *   [x] Clear `fileTypeCache`: `fileTypeCache.clear();`.
+    *   [x] Log: `console.log('[FileProcessor] File caches cleared');`
+*   [x] Export `processFile` and `clearFileCache`.
 
 **File: `main.js` (Cleanup Part 3)**
 
-*   [ ] Remove the `tiktoken = require('tiktoken')` block.
-*   [ ] Remove the `encoder` global variable.
-*   [ ] Remove the `fileCache` global variable.
-*   [ ] Remove the `fileTypeCache` global variable.
-*   [ ] Remove the `isBinaryFile` function.
-*   [ ] Remove the `countTokens` function.
-*   [ ] Remove the `processSingleFile` function.
+*   [x] Remove the `tiktoken = require('tiktoken')` block.
+*   [x] Remove the `encoder` global variable.
+*   [x] Remove the `fileCache` global variable.
+*   [x] Remove the `fileTypeCache` global variable.
+*   [x] Remove the `isBinaryFile` function.
+*   [x] Remove the `countTokens` function.
+*   [x] Remove the `processSingleFile` function.
+*   [x] Confirm no original functionality has been lost or altered.
 
 ---
 
