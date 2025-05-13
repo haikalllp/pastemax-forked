@@ -40,6 +40,9 @@ export interface SidebarProps {
   expandedNodes: Record<string, boolean>;
   toggleExpanded: (nodeId: string) => void;
   includeBinaryPaths: boolean;
+  selectedTaskType?: string;
+  onTaskTypeChange?: (taskTypeId: string) => void;
+  onManageCustomTypes?: () => void;
 }
 
 export interface FileListProps {
@@ -74,7 +77,7 @@ export interface SearchBarProps {
 }
 
 export interface CopyButtonProps {
-  onCopy: () => void;
-  isDisabled: boolean;
-  copyStatus: boolean;
+  text: string;
+  className?: string;
+  children?: JSX.Element | string;
 }
