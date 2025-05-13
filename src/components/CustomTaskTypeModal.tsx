@@ -204,7 +204,7 @@ const CustomTaskTypeModal = ({
 
             <div className="form-actions">
               <button className="cancel-button" onClick={resetForm}>
-                Cancel
+                Clear
               </button>
               <button className="save-button" onClick={handleSaveTaskType}>
                 {editingIndex !== null ? 'Update' : 'Add'} Task Type

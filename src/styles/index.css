@@ -139,6 +139,18 @@
   --scrollbar-thumb: #424242;
   --scrollbar-thumb-hover: #4f4f4f;
 
+  /* Custom modal and input variables for dark mode */
+  --bg-color: #232326;
+  --bg-color-lighter: #29292c;
+  --bg-color-lightest: #2d2d30;
+  --text-color: #e8e8e8;
+  --text-muted: #bbbbbb;
+  --input-bg: #232326;
+  --hover-bg: #29292c;
+  --primary-color: #0e639c;
+  --error-color-light: #3d2323;
+  --error-color-dark: #a94442;
+
   /* Set color scheme for browser UI elements */
   color-scheme: dark;
 }
@@ -3759,34 +3771,43 @@ button:hover svg.lucide {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
+.dark-mode .custom-task-type-modal-header {
+  background-color: var(--background-secondary);
+}
+
+.dark-mode .custom-task-type-modal-header h2 {
+  color: var(--text-color);
+}
+
+.dark-mode .custom-task-type-modal-content {
+  background-color: var(--background-primary);
+}
+
+.dark-mode .form-group label {
+  color: var(--text-color);
+}
+
+.dark-mode .form-group input,
+.dark-mode .form-group textarea {
+  background-color: var(--input-bg);
+  color: var(--text-color);
+}
+
 .dark-mode .task-type-item {
   background-color: var(--hover-bg);
 }
 
-.dark-mode .edit-button,
-.dark-mode .cancel-button {
-  background-color: var(--bg-color-lighter);
+.dark-mode .task-type-name {
   color: var(--text-color);
-  border: 1px solid var(--border-color);
 }
 
-.dark-mode .delete-button {
-  background-color: var(--error-color-dark);
-  color: var(--error-color-light);
-}
-
-.dark-mode .edit-button:hover,
-.dark-mode .cancel-button:hover {
-  background-color: var(--bg-color-lightest);
-}
-
-.dark-mode .delete-button:hover {
-  background-color: var(--error-color);
-  color: white;
+.dark-mode .task-type-description {
+  color: var(--text-muted);
 }
 
 .dark-mode .no-task-types {
   background-color: var(--bg-color-lighter);
+  color: var(--text-muted);
 }
 
 /* Animations */
