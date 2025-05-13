@@ -584,10 +584,12 @@ input[type='checkbox'][disabled] {
 }
 
 .sidebar-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   padding: var(--space-sm) var(--space-lg);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .sidebar-folder-path {
@@ -596,7 +598,7 @@ input[type='checkbox'][disabled] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0px var(--space-lg);
 }
 
 .sidebar-search {
@@ -645,13 +647,13 @@ input[type='checkbox'][disabled] {
 }
 
 .content-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
   color: var(--text-primary);
   margin-left: var(--space-md); /* Add left margin to move it right */
   margin-bottom: var(--space-sm); /* Add bottom margin for spacing */
-  margin-top: var(--space-xs); /* Reduced top margin from --space-md to --space-xs */
-  /* Alternative: padding-left: var(--space-md); */
+  margin-top: var(--space-sm); /* Reduced top margin from --space-md to --space-xs */
 }
 
 /* Remove the red underline from content titles (if it existed) */
@@ -803,13 +805,13 @@ input[type='checkbox'][disabled] {
 }
 
 .tree-item-name {
+  font: var(--font-size-xs);
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
-  font-family: var(--font-family-code); /* Use code font for filenames */
 }
 
 .tree-item-tokens {
@@ -1787,6 +1789,7 @@ input[type='text'].search-input:focus {
 
 .sort-options {
   position: absolute;
+  margin-right: var(--space-lg);
   top: calc(100% + 4px); /* Position below the button */
   right: 0;
   background-color: var(--background-primary);
@@ -1796,7 +1799,6 @@ input[type='text'].search-input:focus {
   z-index: 100; /* Ensure dropdown is above other content */
   min-width: 180px;
   padding: 4px 0; /* Add some vertical padding */
-  /* Add animation if desired */
 }
 
 .sort-option {
@@ -3139,21 +3141,16 @@ button:hover svg.lucide {
 
 /* Sidebar Task Type Selector  */
 .sidebar-task-type {
-  padding: var(--space-xs) var(--space-md);
-  border-bottom: 1px solid rgba(224, 224, 224, 0.2);
+  padding: var(--space-xs) 22px;
   background-color: var(--background-secondary);
   position: relative;
   z-index: 100;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .sidebar-task-type .sidebar-title {
   margin-bottom: var(--space-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-color);
-  font-size: var(--font-size-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  padding: var(--space-xs) 0px;
 }
 
 .sidebar-task-type-selected {

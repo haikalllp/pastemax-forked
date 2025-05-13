@@ -11,7 +11,7 @@ interface FileCardComponentProps {
 }
 
 const FileCard = ({ file, isSelected, toggleSelection, onPreview }: FileCardComponentProps) => {
-  const { name, path: filePath, tokenCount, isBinary, fileType, size } = file;
+  const { name, path: filePath, tokenCount, isBinary, size } = file;
 
   // Format file size for display
   const formatFileSize = (bytes: number) => {

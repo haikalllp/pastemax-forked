@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
-import CopyButton from './components/CopyButton';
 import { FileData, IgnoreMode } from './types/FileTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import IgnoreListModal from './components/ignoreListModal';
