@@ -667,6 +667,12 @@ input[type='checkbox'][disabled] {
   gap: 16px;
 }
 
+.content-header-actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg); /* Adjust gap as needed, using a larger gap for separation */
+}
+
 /* ==========================================================================
    Component Styles
    ========================================================================== */
@@ -1771,7 +1777,16 @@ input[type='text'].search-input:focus {
 
 /* -------------------- Sort Dropdown (in Content Header) -------------------- */
 .sort-dropdown {
-  position: relative; /* For absolute positioning of options */
+  position: absolute; /* Panel is absolutely positioned */
+  top: calc(100% + 4px); /* Position below the trigger */
+  right: 0; /* Align to the right of its relative parent (.sort-options) */
+  background-color: var(--background-primary);
+  border: var(--standard-border);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: var(--z-dropdown); /* Ensure dropdown is above other content */
+  min-width: 180px;
+  padding: 4px 0; /* Add some vertical padding */
 }
 
 .sort-dropdown-button {
@@ -1788,17 +1803,11 @@ input[type='text'].search-input:focus {
 }
 
 .sort-options {
-  position: absolute;
-  margin-right: var(--space-lg);
-  top: calc(100% + 4px); /* Position below the button */
-  right: 0;
-  background-color: var(--background-primary);
-  border: var(--standard-border);
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 100; /* Ensure dropdown is above other content */
-  min-width: 180px;
-  padding: 4px 0; /* Add some vertical padding */
+  position: relative; /* Container for the sort trigger and dropdown */
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-right: var(--space-lg); /* Optional: if spacing is needed for the whole control */
 }
 
 .sort-option {

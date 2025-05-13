@@ -1067,13 +1067,14 @@ const App = (): JSX.Element => {
             <div className="content-area">
               <div className="content-header">
                 <div className="content-title">Selected Files</div>
-                <div className="stats-info">
-                  {displayedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
-                  tokens
-                </div>
-                <div className="sort-options">
-                  <div className="sort-label">Sort:</div>
-                  <div className="sort-selector" onClick={toggleSortDropdown}>
+                <div className="content-header-actions-group"> {/* New wrapper div */}
+                  <div className="stats-info">
+                    {displayedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
+                    tokens
+                  </div>
+                  <div className="sort-options">
+                    <div className="sort-label">Sort:</div>
+                    <div className="sort-selector" onClick={toggleSortDropdown}>
                     <span className="current-sort">
                       {sortOptions.find((opt) => opt.value === sortOrder)?.label || sortOrder}
                     </span>
@@ -1094,7 +1095,8 @@ const App = (): JSX.Element => {
                     )}
                   </div>
                 </div>
-              </div>
+              </div> {/* This closes content-header-actions-group */}
+              </div> {/* This closes content-header */}
 
               <FileList
                 files={displayedFiles}
