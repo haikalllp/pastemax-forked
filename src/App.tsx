@@ -10,7 +10,10 @@ import ThemeToggle from './components/ThemeToggle';
 import UpdateModal from './components/UpdateModal';
 import { useIgnorePatterns } from './hooks/useIgnorePatterns';
 import UserInstructions from './components/UserInstructions';
+import TaskTypeSelector from './components/TaskTypeSelector';
+import { DEFAULT_TASK_TYPES, STORAGE_KEY_TASK_TYPE } from './types/TaskTypes';
 import { DownloadCloud } from 'lucide-react';
+import CustomTaskTypeModal from './components/CustomTaskTypeModal';
 
 /**
  * Import path utilities for handling file paths across different operating systems.
@@ -55,6 +58,7 @@ const STORAGE_KEYS = {
   IGNORE_MODE: 'pastemax-ignore-mode',
   IGNORE_SETTINGS_MODIFIED: 'pastemax-ignore-settings-modified',
   INCLUDE_BINARY_PATHS: 'pastemax-include-binary-paths',
+  TASK_TYPE: STORAGE_KEY_TASK_TYPE,
 };
 
 /* ============================== MAIN APP COMPONENT ============================== */
@@ -72,6 +76,7 @@ const App = (): JSX.Element => {
   const savedFiles = localStorage.getItem(STORAGE_KEYS.SELECTED_FILES);
   const savedSortOrder = localStorage.getItem(STORAGE_KEYS.SORT_ORDER);
   const savedSearchTerm = localStorage.getItem(STORAGE_KEYS.SEARCH_TERM);
+  const savedTaskType = localStorage.getItem(STORAGE_KEYS.TASK_TYPE);
   // const savedIgnoreMode = localStorage.getItem(STORAGE_KEYS.IGNORE_MODE); no longer needed
 
   /* ============================== STATE: Core App State ============================== */
@@ -114,6 +119,10 @@ const App = (): JSX.Element => {
   /* ============================== STATE: UI Controls ============================== */
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [isSafeMode, setIsSafeMode] = useState(false);
+  const [selectedTaskType, setSelectedTaskType] = useState(
+    savedTaskType || DEFAULT_TASK_TYPES[0].id
+  );
+  const [isCustomTaskTypeModalOpen, setIsCustomTaskTypeModalOpen] = useState(false);
 
   /* ============================== STATE: User Instructions ============================== */
   const [userInstructions, setUserInstructions] = useState('');
@@ -210,6 +219,11 @@ const App = (): JSX.Element => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.INCLUDE_BINARY_PATHS, String(includeBinaryPaths));
   }, [includeBinaryPaths]);
+
+  // Persist task type when it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TASK_TYPE, selectedTaskType);
+  }, [selectedTaskType]);
 
   // Effect to handle binary file selection when includeBinaryPaths changes
   useEffect(() => {
@@ -909,6 +923,45 @@ const App = (): JSX.Element => {
     }
   }, [updateStatus]);
 
+  // Handle task type change
+  const handleTaskTypeChange = (taskTypeId: string) => {
+    setSelectedTaskType(taskTypeId);
+  };
+
+  // Handle copying content to clipboard
+  const handleCopy = async () => {
+    if (selectedFiles.length === 0) return;
+
+    try {
+      const content = getSelectedFilesContent();
+      await navigator.clipboard.writeText(content);
+      setProcessingStatus({ status: 'complete', message: 'Copied to clipboard!' });
+
+      // Reset the status after 2 seconds
+      setTimeout(() => {
+        setProcessingStatus({ status: 'idle', message: '' });
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      setProcessingStatus({ status: 'error', message: 'Failed to copy to clipboard' });
+    }
+  };
+
+  const handleManageCustomTaskTypes = () => {
+    setIsCustomTaskTypeModalOpen(true);
+  };
+
+  const handleCustomTaskTypesUpdated = () => {
+    // Force reload task types by triggering a re-render with a temporary state update
+    // This creates a state change that will cause the TaskTypeSelector to reload custom types
+    const currentTaskType = selectedTaskType;
+    // Temporarily set to the first default type and then back to selected
+    setSelectedTaskType('none');
+    setTimeout(() => {
+      setSelectedTaskType(currentTaskType);
+    }, 50);
+  };
+
   /* ===================================================================== */
   /* ============================== RENDER =============================== */
   /* ===================================================================== */
@@ -1010,25 +1063,31 @@ const App = (): JSX.Element => {
               expandedNodes={expandedNodes}
               toggleExpanded={toggleExpanded}
               includeBinaryPaths={includeBinaryPaths}
+              selectedTaskType={selectedTaskType}
+              onTaskTypeChange={handleTaskTypeChange}
+              onManageCustomTypes={handleManageCustomTaskTypes}
             />
             <div className="content-area">
               <div className="content-header">
                 <div className="content-title">Selected Files</div>
-                <div className="content-actions">
-                  <div className="file-stats">
-                    {selectedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
-                    tokens
-                  </div>
-                  <div className="sort-dropdown">
-                    <button className="sort-dropdown-button" onClick={toggleSortDropdown}>
-                      Sort: {sortOptions.find((opt) => opt.value === sortOrder)?.label || sortOrder}
-                    </button>
+                <div className="stats-info">
+                  {displayedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
+                  tokens
+                </div>
+                <div className="sort-options">
+                  <div className="sort-label">Sort:</div>
+                  <div className="sort-selector" onClick={toggleSortDropdown}>
+                    <span className="current-sort">
+                      {sortOptions.find((opt) => opt.value === sortOrder)?.label || sortOrder}
+                    </span>
+                    <span className="dropdown-arrow">{sortDropdownOpen ? '▲' : '▼'}</span>
+
                     {sortDropdownOpen && (
-                      <div className="sort-options">
+                      <div className="sort-dropdown">
                         {sortOptions.map((option) => (
                           <div
                             key={option.value}
-                            className={`sort-option ${sortOrder === option.value ? 'active' : ''}`}
+                            className={`sort-option ${option.value === sortOrder ? 'selected' : ''}`}
                             onClick={() => handleSortChange(option.value)}
                           >
                             {option.label}
@@ -1046,66 +1105,47 @@ const App = (): JSX.Element => {
                 toggleFileSelection={toggleFileSelection}
               />
 
-              {/*
-               * User Instructions Component
-               * Positioned after the file list and before the copy button
-               * Allows users to enter supplementary text that will be
-               * included at the end of the copied content
-               */}
+              {/* User instructions section */}
               <UserInstructions
                 instructions={userInstructions}
                 setInstructions={setUserInstructions}
+                selectedTaskType={selectedTaskType}
               />
 
-              <div className="copy-button-container">
-                <div className="copy-button-wrapper">
-                  <div
-                    className="toggle-options-container"
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      marginBottom: '10px',
-                    }}
-                  >
-                    <label
-                      className="file-tree-option"
-                      style={{ marginRight: '20px' }}
-                      title="Include file tree in copied content"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={includeFileTree}
-                        onChange={() => setIncludeFileTree(!includeFileTree)}
-                      />
-                      <span>Include File Tree</span>
-                    </label>
-                    <label
-                      className="file-tree-option"
-                      title="Include binary files as paths in copied content"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={includeBinaryPaths}
-                        onChange={() => setIncludeBinaryPaths(!includeBinaryPaths)}
-                      />
-                      <span>Include Binary As Paths</span>
-                    </label>
-                  </div>
-                  {/*
-                   * Copy Button
-                   * When clicked, this will copy all selected files along with:
-                   * - File tree (if enabled via the checkbox)
-                   * - User instructions (if any were entered)
-                   */}
-                  <CopyButton
-                    text={getSelectedFilesContent()}
-                    className="primary full-width copy-button-main"
-                  >
-                    <span className="copy-button-text">
-                      COPY ALL SELECTED ({selectedFiles.length} files)
-                    </span>
-                  </CopyButton>
+              {/* Options for content format */}
+              <div className="copy-options">
+                <div className="option">
+                  <input
+                    type="checkbox"
+                    id="includeFileTree"
+                    checked={includeFileTree}
+                    onChange={(e) => setIncludeFileTree(e.target.checked)}
+                  />
+                  <label htmlFor="includeFileTree">Include File Tree</label>
                 </div>
+
+                <div className="option">
+                  <input
+                    type="checkbox"
+                    id="includeBinaryPaths"
+                    checked={includeBinaryPaths}
+                    onChange={(e) => setIncludeBinaryPaths(e.target.checked)}
+                  />
+                  <label htmlFor="includeBinaryPaths">Include Binary As Paths</label>
+                </div>
+              </div>
+
+              {/* Copy button */}
+              <div className="copy-button-container">
+                <button
+                  className="primary copy-button-main"
+                  onClick={handleCopy}
+                  disabled={selectedFiles.length === 0}
+                >
+                  <span className="copy-button-text">
+                    COPY ALL SELECTED ({selectedFiles.length} files)
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -1126,6 +1166,13 @@ const App = (): JSX.Element => {
           onClose={() => setIsUpdateModalOpen(false)}
           updateStatus={updateStatus}
         />
+        {isCustomTaskTypeModalOpen && (
+          <CustomTaskTypeModal
+            isOpen={isCustomTaskTypeModalOpen}
+            onClose={() => setIsCustomTaskTypeModalOpen(false)}
+            onTaskTypesUpdated={handleCustomTaskTypesUpdated}
+          />
+        )}
       </div>
     </ThemeProvider>
   );

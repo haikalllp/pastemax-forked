@@ -40,6 +40,9 @@ export interface SidebarProps {
   expandedNodes: Record<string, boolean>;
   toggleExpanded: (nodeId: string) => void;
   includeBinaryPaths: boolean;
+  selectedTaskType?: string;
+  onTaskTypeChange?: (taskTypeId: string) => void;
+  onManageCustomTypes?: () => void;
 }
 
 export interface FileListProps {
