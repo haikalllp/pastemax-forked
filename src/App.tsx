@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
-import CopyButton from './components/CopyButton';
 import { FileData, IgnoreMode } from './types/FileTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import IgnoreListModal from './components/ignoreListModal';
@@ -10,9 +9,8 @@ import ThemeToggle from './components/ThemeToggle';
 import UpdateModal from './components/UpdateModal';
 import { useIgnorePatterns } from './hooks/useIgnorePatterns';
 import UserInstructions from './components/UserInstructions';
-import TaskTypeSelector from './components/TaskTypeSelector';
 import { DEFAULT_TASK_TYPES, STORAGE_KEY_TASK_TYPE } from './types/TaskTypes';
-import { DownloadCloud } from 'lucide-react';
+import { DownloadCloud, ArrowDownUp } from 'lucide-react';
 import CustomTaskTypeModal from './components/CustomTaskTypeModal';
 
 /**
@@ -294,7 +292,6 @@ const App = (): JSX.Element => {
       `[useEffect triggered] Folder: ${selectedFolder}, ReloadTrigger: ${reloadTrigger}, IgnoreModified: ${ignoreSettingsModified}`
     );
 
-    // Set status to processing *before* the timeout to give immediate feedback
     // Check if this is a refresh vs initial load
     const isRefreshingCurrentFolder =
       reloadTrigger > 0 && selectedFolder === localStorage.getItem(STORAGE_KEYS.SELECTED_FOLDER);
@@ -315,7 +312,7 @@ const App = (): JSX.Element => {
         folderPath: selectedFolder,
         ignoreMode,
         customIgnores,
-        ignoreSettingsModified,
+        ignoreSettingsModified, // Send the current state
       });
       lastSentIgnoreSettingsModifiedRef.current = ignoreSettingsModified;
       window.electron.ipcRenderer.send('request-file-list', {
@@ -1070,48 +1067,80 @@ const App = (): JSX.Element => {
             <div className="content-area">
               <div className="content-header">
                 <div className="content-title">Selected Files</div>
-                <div className="stats-info">
-                  {displayedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
-                  tokens
-                </div>
-                <div className="sort-options">
-                  <div className="sort-label">Sort:</div>
-                  <div className="sort-selector" onClick={toggleSortDropdown}>
-                    <span className="current-sort">
-                      {sortOptions.find((opt) => opt.value === sortOrder)?.label || sortOrder}
-                    </span>
-                    <span className="dropdown-arrow">{sortDropdownOpen ? '▲' : '▼'}</span>
-
-                    {sortDropdownOpen && (
-                      <div className="sort-dropdown">
-                        {sortOptions.map((option) => (
-                          <div
-                            key={option.value}
-                            className={`sort-option ${option.value === sortOrder ? 'selected' : ''}`}
-                            onClick={() => handleSortChange(option.value)}
-                          >
-                            {option.label}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                <div className="content-header-actions-group">
+                  {' '}
+                  {/* New wrapper div */}
+                  <div className="stats-info">
+                    {displayedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
+                    tokens
                   </div>
-                </div>
-              </div>
-
+                  <div className="sort-options">
+                    <div className="sort-selector-wrapper">
+                      <button
+                        type="button"
+                        className="sort-selector-button"
+                        onClick={toggleSortDropdown}
+                        aria-haspopup="listbox"
+                        aria-expanded={sortDropdownOpen}
+                        aria-label="Change sort order"
+                      >
+                        <span
+                          className="sort-icon"
+                          aria-hidden="true"
+                          style={{ display: 'flex', alignItems: 'center' }}
+                        >
+                          {/* Lucide React sort icon */}
+                          {/* Import ArrowDownUp from 'lucide-react' at the top */}
+                          <ArrowDownUp size={16} />
+                        </span>
+                        <span id="current-sort-value" className="current-sort">
+                          {sortOptions.find((opt) => opt.value === sortOrder)?.label || sortOrder}
+                        </span>
+                        <span className="dropdown-arrow" aria-hidden="true">
+                          {sortDropdownOpen ? '▲' : '▼'}
+                        </span>
+                      </button>
+                      {sortDropdownOpen && (
+                        <ul
+                          className="sort-dropdown"
+                          role="listbox"
+                          aria-label="Sort order options"
+                        >
+                          {sortOptions.map((option) => (
+                            <li
+                              key={option.value}
+                              role="option"
+                              aria-selected={option.value === sortOrder}
+                              className={`sort-option-item ${option.value === sortOrder ? 'selected' : ''}`}
+                            >
+                              <button
+                                type="button"
+                                className="sort-option-button"
+                                onClick={() => handleSortChange(option.value)}
+                              >
+                                {option.label}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </div>{' '}
+                {/* This closes content-header-actions-group */}
+              </div>{' '}
+              {/* This closes content-header */}
               <FileList
                 files={displayedFiles}
                 selectedFiles={selectedFiles}
                 toggleFileSelection={toggleFileSelection}
               />
-
               {/* User instructions section */}
               <UserInstructions
                 instructions={userInstructions}
                 setInstructions={setUserInstructions}
                 selectedTaskType={selectedTaskType}
               />
-
               {/* Options for content format */}
               <div className="copy-options">
                 <div className="option">
@@ -1134,7 +1163,6 @@ const App = (): JSX.Element => {
                   <label htmlFor="includeBinaryPaths">Include Binary As Paths</label>
                 </div>
               </div>
-
               {/* Copy button */}
               <div className="copy-button-container">
                 <button

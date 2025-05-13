@@ -77,7 +77,7 @@ export interface SearchBarProps {
 }
 
 export interface CopyButtonProps {
-  onCopy: () => void;
-  isDisabled: boolean;
-  copyStatus: boolean;
+  text: string;
+  className?: string;
+  children?: JSX.Element | string;
 }

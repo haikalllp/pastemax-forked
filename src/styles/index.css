@@ -46,7 +46,7 @@
   --transition-slow: 350ms ease;
   --animation-curve: cubic-bezier(0.25, 0.1, 0.25, 1);
 
-  /* Spacing & Layout */
+  /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
@@ -140,6 +140,18 @@
   --scrollbar-track: #1e1e1e;
   --scrollbar-thumb: #424242;
   --scrollbar-thumb-hover: #4f4f4f;
+
+  /* Custom modal and input variables for dark mode */
+  --bg-color: #232326;
+  --bg-color-lighter: #29292c;
+  --bg-color-lightest: #2d2d30;
+  --text-color: #e8e8e8;
+  --text-muted: #bbbbbb;
+  --input-bg: #232326;
+  --hover-bg: #29292c;
+  --primary-color: #0e639c;
+  --error-color-light: #3d2323;
+  --error-color-dark: #a94442;
 
   /* Set color scheme for browser UI elements */
   color-scheme: dark;
@@ -586,10 +598,12 @@ input[type='checkbox'][disabled] {
 }
 
 .sidebar-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   padding: var(--space-sm) var(--space-lg);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .sidebar-folder-path {
@@ -598,7 +612,7 @@ input[type='checkbox'][disabled] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0px var(--space-lg);
 }
 
 .sidebar-search {
@@ -634,6 +648,7 @@ input[type='checkbox'][disabled] {
   overflow: hidden; /* Manage internal scrolling */
   background-color: var(--background-primary);
   min-width: 0; /* Prevent content from pushing layout */
+  margin-right: var(--space-xs);
 }
 
 .content-header {
@@ -647,13 +662,14 @@ input[type='checkbox'][disabled] {
 }
 
 .content-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
   color: var(--text-primary);
   margin-left: var(--space-md); /* Add left margin to move it right */
   margin-bottom: var(--space-sm); /* Add bottom margin for spacing */
-  margin-top: var(--space-xs); /* Reduced top margin from --space-md to --space-xs */
-  /* Alternative: padding-left: var(--space-md); */
+  margin-top: var(--space-sm); /* Reduced top margin from --space-md to --space-xs */
+  margin-right: var(--space-xs);
 }
 
 /* Remove the red underline from content titles (if it existed) */
@@ -665,6 +681,24 @@ input[type='checkbox'][disabled] {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.content-header-actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg); /* Adjust gap as needed, using a larger gap for separation */
+}
+
+/* Match stats-info to content-title styling */
+.stats-info {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-transform: capitalize;
+  color: var(--text-primary);
+  margin-left: var(--space-md);
+  margin-bottom: var(--space-sm);
+  margin-top: var(--space-sm);
+  margin-right: var(--space-xs);
 }
 
 /* ==========================================================================
@@ -805,14 +839,13 @@ input[type='checkbox'][disabled] {
 }
 
 .tree-item-name {
+  font-size: var(--font-size-md);
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
-  padding-left: var(--space-xs); /* Add a bit of padding to the left */
-  font-size: 14.5px; /* Using the small font size variable */
 }
 
 .tree-item-tokens {
@@ -995,13 +1028,6 @@ input[type='checkbox'][disabled] {
   border-color: var(--color-primary-light);
 }
 
-.ignore-patterns-section .section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-xs);
-}
-
 .ignore-patterns-section h3 {
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-bold);
@@ -1157,9 +1183,11 @@ input[type='checkbox'][disabled] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: var(--background-primary);
-  border-radius: var(--border-radius-md);
+  padding: 8px 12px;
+  margin: 4px var(--space-md);
+  background-color: #e8e8e8; /* Darker background for light mode */
   border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
   transition: all var (--transition-fast);
   -webkit-border-radius: var(--border-radius-md);
   -moz-border-radius: var(--border-radius-md);
@@ -1776,56 +1804,163 @@ input[type='text'].search-input:focus {
 }
 
 /* -------------------- Sort Dropdown (in Content Header) -------------------- */
-.sort-dropdown {
-  position: relative; /* For absolute positioning of options */
-}
-
-.sort-dropdown-button {
-  display: flex;
-  margin-right: var(--space-lg);
-  align-items: center;
-  gap: 0px;
-  font-size: var(--font-size-md);
-  color: var(--text-primary);
-  background: none; /* Make it look less like a standard button */
-  border: none;
-  padding: 4px 8px; /* Adjust padding */
-  border-radius: 4px;
-}
+/* ==========================================================================
+   Sort Dropdown (Enhanced)
+   ========================================================================== */
 
 .sort-options {
-  position: absolute;
-  top: calc(100% + 4px); /* Position below the button */
-  right: 0;
-  background-color: var(--background-primary);
-  border: var(--standard-border);
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 100; /* Ensure dropdown is above other content */
-  min-width: 180px;
-  padding: 4px 0; /* Add some vertical padding */
-  /* Add animation if desired */
+  position: relative; /* For absolute positioning of the dropdown */
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-right: var(--space-lg);
 }
 
-.sort-option {
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: background-color 0.2s;
+.sort-selector-wrapper {
+  position: relative; /* Anchor for the dropdown */
+}
+
+.sort-selector-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-radius: 4px;
+  background-color: var(--background-primary);
   color: var(--text-primary);
-  display: block; /* Ensure full width clickable */
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  min-width: 200px;
+  text-align: left;
+  gap: var(--space-sm);
+  -webkit-border-radius: 4px;
+  -moz-border-radius: 4px;
+  -ms-border-radius: 4px;
+  -o-border-radius: 4px;
+}
+
+.sort-selector-button:hover {
+  border-color: var(--border-color-focus);
+  background-color: var(--hover-color);
+  transform: none !important;
+  box-shadow: var(--shadow-md);
+}
+
+.sort-selector-button:focus-visible {
+  outline: none;
+  border-color: var(--border-color-focus);
+  box-shadow: var(--focus-ring);
+}
+
+.current-sort {
+  flex-grow: 1; /* Allows text to take available space */
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sort-option:hover {
+.dropdown-arrow {
+  font-size: 12px; /* Adjust as needed */
+  transition: transform var(--transition-fast);
+}
+
+.sort-dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-xs));
+  left: 0;
+  background-color: var(--background-primary);
+  border: none;
+  border-radius: 4px;
+  box-shadow: var(--shadow-md);
+  z-index: var(--z-dropdown);
+  min-width: 100%;
+  padding: var(--space-xs) 0;
+  list-style: none;
+  margin: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  -webkit-border-radius: var(--border-radius-md);
+  -moz-border-radius: var(--border-radius-md);
+  -ms-border-radius: var(--border-radius-md);
+  -o-border-radius: var(--border-radius-md);
+}
+
+.sort-option-item {
+  margin: 0;
+  padding: 0;
+}
+
+.sort-option-button {
+  display: block;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  background-color: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 0; /* Buttons inside list items shouldn't have individual radius */
+  box-shadow: none; /* Remove default button shadow */
+}
+
+.sort-option-button:hover {
+  background-color: var(--hover-color);
+  color: var(--text-primary);
+  transform: none; /* Override default button hover transform */
+  box-shadow: none;
+}
+
+.sort-option-item.selected .sort-option-button {
+  background-color: var(--background-selected);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+.sort-option-button:focus-visible {
+  outline: none;
+  background-color: var(--hover-color); /* Or a specific focus color */
+  box-shadow: inset 0 0 0 2px var(--border-color-focus); /* Inner focus ring */
+}
+
+/* Dark mode adjustments for sort dropdown */
+.dark-mode .sort-selector-button {
+  background-color: var(--background-secondary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-mode .sort-selector-button:hover {
+  border-color: var(--border-color-focus);
   background-color: var(--hover-color);
 }
 
-.sort-option.active {
-  /* Class added via JS */
-  background-color: var(--background-selected);
-  font-weight: 600;
-  color: var(--color-primary); /* Highlight active option */
+.dark-mode .sort-dropdown {
+  background-color: var(--background-secondary); /* Slightly different from primary for depth */
+  border-color: var(--border-color);
 }
+
+.dark-mode .sort-option-button {
+  color: var(--text-primary);
+}
+
+.dark-mode .sort-option-button:hover {
+  background-color: var(--hover-color);
+}
+
+.dark-mode .sort-option-item.selected .sort-option-button {
+  background-color: var(--background-selected);
+  color: var(--color-primary-light); /* Lighter primary for dark mode selected text */
+}
+
+.dark-mode .sort-option-button:focus-visible {
+  background-color: var(--hover-color);
+  box-shadow: inset 0 0 0 2px var(--border-color-focus);
+}
+
+/* (Old sort-dropdown-button, .sort-option, .sort-option.active, etc. styles removed as they are no longer needed) */
 
 /* -------------------- User Instructions (in Content Area) -------------------- */
 .user-instructions-container {
@@ -1889,7 +2024,6 @@ input[type='text'].search-input:focus {
   color: var(--text-secondary);
   font-size: 14px;
   margin-right: var(--space-sm); /* Add some spacing to the right */
-  /* Add styles as needed */
 }
 
 .copy-button {
@@ -3147,20 +3281,16 @@ button:hover svg.lucide {
 
 /* Sidebar Task Type Selector  */
 .sidebar-task-type {
-  padding: var(--space-xs) var(--space-md);
-  border-bottom: 1px solid rgba(224, 224, 224, 0.2);
+  padding: var(--space-xs) 22px;
   background-color: var(--background-secondary);
   position: relative;
   z-index: 100;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .sidebar-task-type .sidebar-title {
   margin-bottom: var(--space-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-color);
-  font-size: var(--font-size-sm);
-  text-transform: uppercase;
+  padding: var(--space-xs) 0px;
 }
 
 .sidebar-task-type-selected {
@@ -3181,7 +3311,23 @@ button:hover svg.lucide {
 }
 
 .sidebar-task-type-selected:hover {
+  background-color: var(--active-color);
+  transition: all 0.2s var(--animation-curve);
+  -webkit-transition: all 0.2s var(--animation-curve);
+  -moz-transition: all 0.2s var(--animation-curve);
+  -ms-transition: all 0.2s var(--animation-curve);
+  -o-transition: all 0.2s var(--animation-curve);
+  border-color: var(--color-primary);
+}
+
+.dark-mode .sidebar-task-type-selected:hover {
   background-color: var(--hover-color);
+  transition: all 0.2s var(--animation-curve);
+  -webkit-transition: all 0.2s var(--animation-curve);
+  -moz-transition: all 0.2s var(--animation-curve);
+  -ms-transition: all 0.2s var(--animation-curve);
+  -o-transition: all 0.2s var(--animation-curve);
+  border-color: var(--primary-color);
 }
 
 .sidebar-task-type-label {
@@ -3201,7 +3347,7 @@ button:hover svg.lucide {
   margin-top: var(--space-xs);
   max-height: 300px;
   overflow-y: auto;
-  padding: var(--space-xs) 0 0 0; 
+  padding: var(--space-xs) 0 0 0;
 }
 
 .sidebar-task-type-option {
@@ -3293,6 +3439,10 @@ button:hover svg.lucide {
   gap: var(--space-sm);
 }
 
+.option label {
+  cursor: pointer;
+}
+
 /* Copy Button */
 .copy-button-container {
   display: flex;
@@ -3308,8 +3458,6 @@ button:hover svg.lucide {
   transition: background-color var(--transition-fast);
   border-radius: var(--border-radius-md);
 }
-
-
 
 /* Task Type Sections */
 .task-type-section {
@@ -3600,7 +3748,7 @@ button:hover svg.lucide {
 }
 
 .delete-button {
-  background-color: var(--error-color-light);
+  background-color: rgba(65, 40, 44, 0.242);
   color: var(--error-color);
   border: 1px solid var(--error-color-light);
   box-shadow: var(--shadow-sm);
@@ -3625,34 +3773,43 @@ button:hover svg.lucide {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
+.dark-mode .custom-task-type-modal-header {
+  background-color: var(--background-secondary);
+}
+
+.dark-mode .custom-task-type-modal-header h2 {
+  color: var(--text-color);
+}
+
+.dark-mode .custom-task-type-modal-content {
+  background-color: var(--background-primary);
+}
+
+.dark-mode .form-group label {
+  color: var(--text-color);
+}
+
+.dark-mode .form-group input,
+.dark-mode .form-group textarea {
+  background-color: var(--input-bg);
+  color: var(--text-color);
+}
+
 .dark-mode .task-type-item {
   background-color: var(--hover-bg);
 }
 
-.dark-mode .edit-button,
-.dark-mode .cancel-button {
-  background-color: var(--bg-color-lighter);
+.dark-mode .task-type-name {
   color: var(--text-color);
-  border: 1px solid var(--border-color);
 }
 
-.dark-mode .delete-button {
-  background-color: var(--error-color-dark);
-  color: var(--error-color-light);
-}
-
-.dark-mode .edit-button:hover,
-.dark-mode .cancel-button:hover {
-  background-color: var(--bg-color-lightest);
-}
-
-.dark-mode .delete-button:hover {
-  background-color: var(--error-color);
-  color: white;
+.dark-mode .task-type-description {
+  color: var(--text-muted);
 }
 
 .dark-mode .no-task-types {
   background-color: var(--bg-color-lighter);
+  color: var(--text-muted);
 }
 
 /* Animations */

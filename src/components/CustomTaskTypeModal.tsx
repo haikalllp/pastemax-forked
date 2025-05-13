@@ -202,14 +202,14 @@ const CustomTaskTypeModal = ({
 
             {validationError && <div className="validation-error">{validationError}</div>}
 
-            <div className="form-actions">
-              <button className="cancel-button" onClick={resetForm}>
-                Cancel
-              </button>
-              <button className="save-button" onClick={handleSaveTaskType}>
-                {editingIndex !== null ? 'Update' : 'Add'} Task Type
-              </button>
-            </div>
+<div className="form-actions">
+  <button className="cancel-button" onClick={resetForm}>
+    {editingIndex !== null ? 'Cancel' : 'Clear'}
+  </button>
+  <button className="save-button" onClick={handleSaveTaskType}>
+    {editingIndex !== null ? 'Update' : 'Add'} Task Type
+  </button>
+</div>
           </div>
 
           <div className="existing-task-types">
