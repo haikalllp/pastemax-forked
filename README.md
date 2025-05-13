@@ -166,9 +166,11 @@ npm run package
 ## Troubleshooting
 
 ### Getting "Warning: Not trusted" on Windows
+
 If you see a warning about the app not being trusted, you can bypass this by clicking "run anyways". This is a common issue with Electron apps, especially since PasteMax is not signed.
 
 ### Getting "App not responding" on Mac
+
 If you encounter an "App not responding" message on Mac, it may be due to macOS security settings. You can try the following:
 
 1. Open System Preferences.

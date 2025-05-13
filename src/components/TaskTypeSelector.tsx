@@ -76,7 +76,7 @@ const TaskTypeSelector = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
- 
+
   // Handle task type selection
   const handleTaskTypeSelect = (taskTypeId: string) => {
     onTaskTypeChange(taskTypeId);

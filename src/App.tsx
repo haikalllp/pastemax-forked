@@ -1067,7 +1067,9 @@ const App = (): JSX.Element => {
             <div className="content-area">
               <div className="content-header">
                 <div className="content-title">Selected Files</div>
-                <div className="content-header-actions-group"> {/* New wrapper div */}
+                <div className="content-header-actions-group">
+                  {' '}
+                  {/* New wrapper div */}
                   <div className="stats-info">
                     {displayedFiles.length} files | ~{totalFormattedContentTokens.toLocaleString()}{' '}
                     tokens
@@ -1082,7 +1084,11 @@ const App = (): JSX.Element => {
                         aria-expanded={sortDropdownOpen}
                         aria-label="Change sort order"
                       >
-                        <span className="sort-icon" aria-hidden="true" style={{ display: 'flex', alignItems: 'center' }}>
+                        <span
+                          className="sort-icon"
+                          aria-hidden="true"
+                          style={{ display: 'flex', alignItems: 'center' }}
+                        >
                           {/* Lucide React sort icon */}
                           {/* Import ArrowDownUp from 'lucide-react' at the top */}
                           <ArrowDownUp size={16} />
@@ -1090,10 +1096,16 @@ const App = (): JSX.Element => {
                         <span id="current-sort-value" className="current-sort">
                           {sortOptions.find((opt) => opt.value === sortOrder)?.label || sortOrder}
                         </span>
-                        <span className="dropdown-arrow" aria-hidden="true">{sortDropdownOpen ? '▲' : '▼'}</span>
+                        <span className="dropdown-arrow" aria-hidden="true">
+                          {sortDropdownOpen ? '▲' : '▼'}
+                        </span>
                       </button>
                       {sortDropdownOpen && (
-                        <ul className="sort-dropdown" role="listbox" aria-label="Sort order options">
+                        <ul
+                          className="sort-dropdown"
+                          role="listbox"
+                          aria-label="Sort order options"
+                        >
                           {sortOptions.map((option) => (
                             <li
                               key={option.value}
@@ -1114,22 +1126,21 @@ const App = (): JSX.Element => {
                       )}
                     </div>
                   </div>
-                </div> {/* This closes content-header-actions-group */}
-              </div> {/* This closes content-header */}
-
+                </div>{' '}
+                {/* This closes content-header-actions-group */}
+              </div>{' '}
+              {/* This closes content-header */}
               <FileList
                 files={displayedFiles}
                 selectedFiles={selectedFiles}
                 toggleFileSelection={toggleFileSelection}
               />
-
               {/* User instructions section */}
               <UserInstructions
                 instructions={userInstructions}
                 setInstructions={setUserInstructions}
                 selectedTaskType={selectedTaskType}
               />
-
               {/* Options for content format */}
               <div className="copy-options">
                 <div className="option">
@@ -1152,7 +1163,6 @@ const App = (): JSX.Element => {
                   <label htmlFor="includeBinaryPaths">Include Binary As Paths</label>
                 </div>
               </div>
-
               {/* Copy button */}
               <div className="copy-button-container">
                 <button
