@@ -123,7 +123,7 @@
     "@vitejs/plugin-react": "^4.4.1",
     "concurrently": "^9.1.2",
     "electron": "^34.5.2",
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^26.6.0",
     "esbuild": "^0.25.2",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.2",
